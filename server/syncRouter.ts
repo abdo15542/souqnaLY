@@ -5,6 +5,19 @@ import { getDb } from "./db";
 import { syncOperations } from "../drizzle/schema";
 import { protectedProcedure, router } from "./_core/trpc";
 
+const MAX_OPERATION_PAYLOAD_BYTES = 100_000;
+const MAX_BATCH_BYTES = 1_000_000;
+
+function jsonByteLength(value: unknown): number | null {
+  try {
+    const serialized = JSON.stringify(value);
+    if (serialized === undefined) return null;
+    return new TextEncoder().encode(serialized).byteLength;
+  } catch {
+    return null;
+  }
+}
+
 const operationSchema = z.object({
   id: z.string().min(1).max(64),
   kind: z.enum([
@@ -17,7 +30,10 @@ const operationSchema = z.object({
     "marketplace.order.create",
   ]),
   entityId: z.string().trim().min(1).max(191),
-  payload: z.unknown(),
+  payload: z.unknown().refine(value => {
+    const size = jsonByteLength(value);
+    return size !== null && size <= MAX_OPERATION_PAYLOAD_BYTES;
+  }, "Payload must be valid JSON and no larger than 100 KB"),
   createdAt: z.string().min(1).max(40).refine(value => Number.isFinite(Date.parse(value)), "Invalid createdAt timestamp"),
   updatedAt: z.string().min(1).max(40).refine(value => Number.isFinite(Date.parse(value)), "Invalid updatedAt timestamp"),
   attemptCount: z.number().int().min(0).max(1_000_000).optional(),
@@ -38,9 +54,19 @@ export const syncRouter = router({
    * Persist device operations in a per-user inbox before acknowledging them.
    * Retries with the same ID and same content are safe; reusing an ID for
    * different content is reported as a conflict rather than silently accepted.
+   * Payload and batch limits protect the inbox from oversized requests.
    */
   push: protectedProcedure
-    .input(z.object({ operations: z.array(operationSchema).min(1).max(50) }))
+    .input(z.object({
+      operations: z.array(operationSchema).min(1).max(50).superRefine((operations, ctx) => {
+        const size = jsonByteLength(operations);
+        if (size === null) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Sync batch must be valid JSON" });
+        } else if (size > MAX_BATCH_BYTES) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Sync batch must not exceed 1 MB" });
+        }
+      }),
+    }))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) {
@@ -50,7 +76,7 @@ export const syncRouter = router({
       const seen = new Set<string>();
       for (const operation of input.operations) {
         if (seen.has(operation.id)) {
-          throw new Error("A sync batch cannot contain duplicate operation IDs.");
+          throw new TRPCError({ code: "BAD_REQUEST", message: "A sync batch cannot contain duplicate operation IDs." });
         }
         seen.add(operation.id);
       }
