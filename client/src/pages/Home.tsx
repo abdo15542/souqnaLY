@@ -58,6 +58,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getLocalStorageFailureGuidance, readLocalRecord, writeLocalRecord } from "@/lib/localDb";
+import { createLocalSyncOutbox, createSyncOperation, enqueueSyncOperation } from "@/lib/syncEngine";
 import { validateStoreBackup } from "@/lib/backupValidation";
 import { getPrintLayout } from "@/lib/printLayout";
 import { inferThermalPaperWidth, makeDetectedPrinterProfile } from "@/lib/printerProfile";
@@ -640,6 +641,12 @@ function EmptyState({ icon: Icon, title, description, action }: { icon: typeof A
       {action}
     </div>
   );
+}
+
+async function enqueueSaleForCloudSync(sale: Sale) {
+  const outbox = createLocalSyncOutbox(readLocalRecord, writeLocalRecord);
+  const operation = createSyncOperation(sale.isReturn ? "sale.return" : "sale.create", sale.id, sale);
+  return enqueueSyncOperation(outbox, operation);
 }
 
 export default function Home({ initialPage = "dashboard" }: { initialPage?: Page }) {
@@ -2998,6 +3005,10 @@ export default function Home({ initialPage = "dashboard" }: { initialPage?: Page
       }),
       debts: (mixedPaymentEnabled ? creditSplitAmount > 0 : paymentMethod === "credit") ? [{ id: makeId("debt"), customerName: customerName.trim(), customerPhone: customerPhone.trim() || undefined, amount: mixedPaymentEnabled ? creditSplitAmount : cartTotal, paid: 0, createdAt: sale.createdAt, dueDate: "", note: `فاتورة رقم ${sale.id.slice(-5)}` }, ...current.debts] : current.debts,
     }));
+    void enqueueSaleForCloudSync(sale).catch((error) => {
+      console.error("تعذر إضافة الفاتورة إلى قائمة المزامنة", error);
+      toast.error("حُفظت الفاتورة محليًا، لكن تعذرت إضافة المزامنة. صدّر نسخة احتياطية وأعد المحاولة.");
+    });
     setLatestSale(sale);
     resetSaleDraft();
     toast.success(mixedPaymentEnabled ? `تم تسجيل البيع المختلط: ${getPaymentSplitsLabel(paymentSplits || [])}.` : paymentMethod === "credit" ? "تم حفظ البيع والذمة." : "تم تسجيل البيع بنجاح.");
