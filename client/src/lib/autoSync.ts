@@ -3,6 +3,10 @@ import { readLocalRecord, writeLocalRecord } from "./localDb";
 import { createAuthenticatedSyncTransport } from "./syncTransport";
 
 const QUEUE_CHANGED_EVENT = "souqna:sync-queue-changed";
+export const SYNC_STATUS_EVENT = "souqna:sync-status";
+function emitSyncStatus(detail: { state: "syncing" | "idle" | "error"; summary?: SyncBatchSummary; message?: string }) {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(SYNC_STATUS_EVENT, { detail }));
+}
 let stopCurrentSync: (() => void) | undefined;
 
 /**
@@ -21,9 +25,15 @@ export function startAutomaticSync(onResult?: (summary: SyncBatchSummary) => voi
   const run = async () => {
     if (stopped || inFlight || (typeof navigator !== "undefined" && !navigator.onLine)) return;
     inFlight = true;
+    emitSyncStatus({ state: "syncing" });
     try {
       const summary = await syncPendingOperations(store, transport);
-      if (!stopped) onResult?.(summary);
+      if (!stopped) {
+        onResult?.(summary);
+        emitSyncStatus({ state: summary.failed > 0 ? "error" : "idle", summary });
+      }
+    } catch (error) {
+      emitSyncStatus({ state: "error", message: error instanceof Error ? error.message : "تعذرت المزامنة" });
     } finally {
       inFlight = false;
     }
