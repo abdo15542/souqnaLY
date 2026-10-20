@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createLocalSyncOutbox,
   createSyncOperation,
   enqueueSyncOperation,
   syncPendingOperations,
@@ -26,6 +27,12 @@ describe("offline-first synchronization outbox", () => {
       createdAt: "2026-01-02T03:04:05.000Z",
       attemptCount: 0,
     });
+  });
+
+  it("reuses one local outbox instance for the same persistence functions", () => {
+    const readRecord = async <T>(_key: string): Promise<T | null> => null;
+    const writeRecord = async <T>(_key: string, _value: T): Promise<void> => {};
+    expect(createLocalSyncOutbox(readRecord, writeRecord)).toBe(createLocalSyncOutbox(readRecord, writeRecord));
   });
 
   it("does not append the same idempotency key twice", async () => {
