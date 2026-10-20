@@ -64,7 +64,7 @@ export default function SyncStatusIndicator() {
     checking: "جارٍ فحص المزامنة",
     offline: pending > 0 ? `دون اتصال · ${pending} عملية محفوظة` : "دون اتصال · العمل المحلي متاح",
     syncing: pending > 0 ? `جارٍ رفع ${pending} عملية` : "جارٍ التحقق من المزامنة",
-    synced: pending > 0 ? `${pending} عملية بانتظار المزامنة` : "المزامنة محدثة",
+    synced: pending > 0 ? `${pending} عملية بانتظار الرفع` : "تم رفع العمليات المحفوظة",
     attention: pending > 0 ? `تحتاج المزامنة إلى مراجعة · ${pending} عملية` : "تعذرت المزامنة · ستتم إعادة المحاولة",
   };
   const colors: Record<SyncState, string> = {
