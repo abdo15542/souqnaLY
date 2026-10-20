@@ -173,7 +173,7 @@ export const shopRouter = router({
         }).from(products).where(and(
           eq(products.id, input.productId),
           eq(products.shopId, input.shopId),
-        )).limit(1);
+        )).limit(1).for("update");
         if (!product) throw new TRPCError({ code: "NOT_FOUND", message: "Product was not found in this shop." });
         if (product.status !== "active") {
           throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Archived products cannot have stock adjusted." });
