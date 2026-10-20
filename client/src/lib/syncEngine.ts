@@ -1,9 +1,10 @@
 /**
  * Offline-first synchronization outbox for Souqna LY.
  *
- * This module deliberately does not assume that a server endpoint exists.
- * The application must provide a transport connected to an authenticated,
- * idempotent backend before automatic cloud sync can be enabled.
+ * Operations stay in a durable local outbox until an authenticated transport
+ * receives an explicit durable acknowledgement from the server. The current
+ * server inbox persists operations; business projection and cross-device pull
+ * still require a separate domain-sync implementation.
  */
 export type SyncOperationKind =
   | "product.upsert"
