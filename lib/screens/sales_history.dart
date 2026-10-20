@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
-import '../cashier_login.dart';
+import 'cashier_login.dart';
 import '../db.dart';
 import '../models.dart';
 import '../utils.dart';

@@ -100,7 +100,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     return ListTile(
                       title: Row(children: [
                         Expanded(child: Text(p.name)),
-                        if (p.isLow) const Padding(
+                        if (p.isLow) Padding(
                           padding: EdgeInsets.only(right: 8),
                           child: Chip(label: Text('نقص'), visualDensity: VisualDensity.compact, backgroundColor: Colors.orange.shade100),
                         ),
