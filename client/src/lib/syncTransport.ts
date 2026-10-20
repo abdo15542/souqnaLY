@@ -22,10 +22,23 @@ export const createAuthenticatedSyncTransport = (): SyncTransport => async (oper
     ? `${configuredBase}/api/trpc/sync.push`
     : "/api/trpc/sync.push";
 
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  // Match the app's tRPC auth fallback for Android WebViews where cookies are blocked.
+  try {
+    const raw = sessionStorage.getItem("manus-cookie");
+    if (raw) {
+      const prefix = "manus-session=";
+      const token = raw.split(";").find(part => part.trim().startsWith(prefix))?.trim().slice(prefix.length);
+      if (token) headers.Authorization = "Bearer " + token;
+    }
+  } catch {
+    // Session storage may be unavailable; cookie authentication remains enabled.
+  }
+
   const response = await fetch(endpoint, {
     method: "POST",
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ json: { operations } }),
   });
 
