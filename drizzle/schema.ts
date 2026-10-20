@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, json, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -25,4 +25,32 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+/**
+ * Durable inbox for offline-first device operations.
+ * The unique (userId, operationId) key makes retries idempotent per account.
+ * Business effects are intentionally not claimed as applied until a worker
+ * validates and processes these durable records.
+ */
+export const syncOperations = mysqlTable("sync_operations", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  operationId: varchar("operationId", { length: 64 }).notNull(),
+  kind: mysqlEnum("kind", [
+    "product.upsert",
+    "stock.adjust",
+    "sale.create",
+    "sale.return",
+    "customer.upsert",
+    "marketplace.listing.upsert",
+    "marketplace.order.create",
+  ]).notNull(),
+  entityId: varchar("entityId", { length: 191 }).notNull(),
+  payload: json("payload").$type<unknown>().notNull(),
+  clientCreatedAt: timestamp("clientCreatedAt").notNull(),
+  receivedAt: timestamp("receivedAt").defaultNow().notNull(),
+  status: mysqlEnum("status", ["pending", "processed", "failed"]).default("pending").notNull(),
+}, table => ({
+  userOperationUnique: uniqueIndex("sync_operations_user_operation_unique").on(table.userId, table.operationId),
+}));
+
+export type SyncOperationRecord = typeof syncOperations.$inferSelect;
