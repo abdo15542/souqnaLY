@@ -8,6 +8,7 @@ import superjson from "superjson";
 import App from "./App";
 import { startLogin } from "./const";
 import { getSupportMessage, isSupportButtonVisible, LOCAL_SUPPORT_VISIBILITY_KEY, SUPPORT_VISIBILITY_EVENT } from "./lib/customerSupport";
+import { startAutomaticSync } from "./lib/autoSync";
 import "./index.css";
 
 const queryClient = new QueryClient();
@@ -96,6 +97,9 @@ function CustomerSupportLink() {
   const href = `https://wa.me/218917514589?text=${encodeURIComponent(getSupportMessage(role))}`;
   return <a className="official-support-fab" href={href} target="_blank" rel="noreferrer" aria-label="التواصل مع خدمة عملاء سوقنا عبر واتساب"><span className="official-support-fab__mark" aria-hidden="true">W</span><strong>{role === "owner" ? "دعم المالك" : "تواصل معنا"}</strong></a>;
 }
+
+// Best-effort sync resumes on startup, reconnect, foreground and queue updates.
+startAutomaticSync();
 
 createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
