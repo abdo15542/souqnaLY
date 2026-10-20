@@ -1,6 +1,7 @@
 -- Shop tenancy, product catalog and auditable stock ledger.
 -- Apply after 0001_sync_operations.sql and the existing users table.
 
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `shops` (
   `id` int NOT NULL AUTO_INCREMENT,
   `ownerUserId` int NOT NULL,
@@ -15,6 +16,7 @@ CREATE TABLE IF NOT EXISTS `shops` (
   CONSTRAINT `shops_owner_user_fk` FOREIGN KEY (`ownerUserId`) REFERENCES `users` (`id`) ON DELETE RESTRICT
 );
 
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `shop_members` (
   `id` int NOT NULL AUTO_INCREMENT,
   `shopId` int NOT NULL,
@@ -28,6 +30,7 @@ CREATE TABLE IF NOT EXISTS `shop_members` (
   CONSTRAINT `shop_members_user_fk` FOREIGN KEY (`userId`) REFERENCES `users` (`id`) ON DELETE CASCADE
 );
 
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `products` (
   `id` int NOT NULL AUTO_INCREMENT,
   `shopId` int NOT NULL,
@@ -45,6 +48,7 @@ CREATE TABLE IF NOT EXISTS `products` (
   CONSTRAINT `products_shop_fk` FOREIGN KEY (`shopId`) REFERENCES `shops` (`id`) ON DELETE CASCADE
 );
 
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `stock_movements` (
   `id` int NOT NULL AUTO_INCREMENT,
   `shopId` int NOT NULL,
