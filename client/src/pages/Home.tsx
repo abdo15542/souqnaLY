@@ -3256,6 +3256,10 @@ export default function Home({ initialPage = "dashboard" }: { initialPage?: Page
       }),
       debts: sale.paymentMethod === "credit" ? current.debts.map((debt) => (debt.note || "").includes(sale.id.slice(-5)) ? { ...debt, amount: Math.max(0, debt.amount - returnedTotal), note: `${debt.note} · إرجاع ${money(returnedTotal)}` } : debt) : current.debts,
     }));
+    void enqueueSaleForCloudSync(returnSale).catch((error) => {
+      console.error("تعذر إضافة الإرجاع إلى قائمة المزامنة", error);
+      toast.error("سُجل الإرجاع محليًا، لكن تعذرت إضافة المزامنة. احتفظ بنسخة احتياطية.");
+    });
     setReturningSale(null);
     setReturnQuantities({});
     printReturnReceipt(returnSale);
@@ -3360,6 +3364,10 @@ export default function Home({ initialPage = "dashboard" }: { initialPage?: Page
     setReturnStockFeedback(directReturnItems.flatMap((item) => { const product = store.products.find((entry) => entry.id === item.productId); return product ? [{ productName: product.name, quantity: product.quantity + item.quantity }] : []; }));
     const returnSale: Sale = { id: makeId("sale-return"), createdAt: returnedAt, items: directReturnItems.map((item) => ({ ...item, quantity: -item.quantity })), total: -returnedGross, profit: -(returnedGross - returnedCost), subtotal: -returnedGross, discountAmount: 0, paymentMethod: directReturnPaymentMethod, isReturn: true, returnReason: reason, staffMemberId: selectedReturnStaffMember?.id, staffMemberName: selectedReturnStaffMember?.name, note: "إرجاع مباشر من المخزون" };
     setStore((current) => ({ ...current, sales: [returnSale, ...current.sales], products: current.products.map((product) => { const returnedItem = directReturnItems.find((item) => item.productId === product.id); if (!returnedItem) return product; const batches = [...(product.batches ?? []), { id: makeId("direct-return-batch"), receivedAt: returnedAt, quantity: returnedItem.quantity, remainingQuantity: returnedItem.quantity, purchasePrice: Math.max(0, returnedItem.cost), expiryDate: product.expiryDate || "", supplierName: "إرجاع مباشر", note: `إرجاع مباشر: ${reason}` }]; return { ...product, quantity: product.quantity + returnedItem.quantity, batches, expiryDate: getEarliestActiveExpiry(batches) || product.expiryDate }; }) }));
+    void enqueueSaleForCloudSync(returnSale).catch((error) => {
+      console.error("تعذر إضافة الإرجاع المباشر إلى قائمة المزامنة", error);
+      toast.error("سُجل الإرجاع محليًا، لكن تعذرت إضافة المزامنة. احتفظ بنسخة احتياطية.");
+    });
     printReturnReceipt(returnSale);
     setDirectReturnQuantities({});
     setDirectReturnReason("");
