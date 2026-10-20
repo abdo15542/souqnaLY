@@ -176,6 +176,49 @@ export const saleRouter = router({
       }
     }),
 
+  details: protectedProcedure
+    .input(z.object({
+      shopId: shopIdSchema,
+      saleId: z.number().int().positive(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database is unavailable." });
+      await requireShopRole(db, input.shopId, ctx.user.id);
+
+      const [sale] = await db.select({
+        id: sales.id,
+        shopId: sales.shopId,
+        clientSaleId: sales.clientSaleId,
+        subtotal: sales.subtotal,
+        total: sales.total,
+        paymentMethod: sales.paymentMethod,
+        status: sales.status,
+        createdBy: sales.createdBy,
+        createdAt: sales.createdAt,
+      }).from(sales).where(and(
+        eq(sales.id, input.saleId),
+        eq(sales.shopId, input.shopId),
+      )).limit(1);
+
+      if (!sale) throw new TRPCError({ code: "NOT_FOUND", message: "Sale was not found in this shop." });
+
+      const items = await db.select({
+        id: saleItems.id,
+        productId: saleItems.productId,
+        productName: saleItems.productName,
+        sku: saleItems.sku,
+        quantity: saleItems.quantity,
+        unitPrice: saleItems.unitPrice,
+        lineTotal: saleItems.lineTotal,
+      }).from(saleItems).where(and(
+        eq(saleItems.saleId, sale.id),
+        eq(saleItems.shopId, input.shopId),
+      ));
+
+      return { ...sale, items };
+    }),
+
   recent: protectedProcedure
     .input(z.object({ shopId: shopIdSchema, limit: z.number().int().min(1).max(100).default(20) }))
     .query(async ({ ctx, input }) => {
