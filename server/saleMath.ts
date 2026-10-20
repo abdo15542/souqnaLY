@@ -4,7 +4,7 @@ const ZERO = BigInt(0);
 
 export function decimalToMilliUnits(value: string | number): bigint {
   const text = String(value).trim();
-  const match = /^(\\d+)(?:\\.(\\d{1,3}))?$/.exec(text);
+  const match = /^(\d+)(?:\.(\d{1,3}))?$/.exec(text);
   if (!match) throw new Error("Invalid monetary amount");
   const whole = BigInt(match[1]);
   const fraction = BigInt((match[2] ?? "").padEnd(3, "0"));
