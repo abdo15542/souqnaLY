@@ -101,6 +101,7 @@ export async function enqueueSyncOperation(
       return { inserted: false, pending: current.length };
     }
     await store.write([...current, operation]);
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("souqna:sync-queue-changed"));
     return { inserted: true, pending: current.length + 1 };
   });
 }
