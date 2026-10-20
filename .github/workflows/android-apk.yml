@@ -16,9 +16,9 @@ concurrency:
 
 jobs:
   build-apk:
-    name: Build installable Android APK
+    name: Verify app and build installable Android APK
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     env:
       VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
     steps:
@@ -41,6 +41,12 @@ jobs:
 
       - name: Install JavaScript dependencies
         run: pnpm install --no-frozen-lockfile
+
+      - name: TypeScript type check
+        run: pnpm check
+
+      - name: Run automated tests
+        run: pnpm test
 
       - name: Build web client and server bundle
         run: pnpm build
