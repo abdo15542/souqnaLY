@@ -1,4 +1,4 @@
-import { int, json, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { decimal, int, json, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -54,3 +54,53 @@ export const syncOperations = mysqlTable("sync_operations", {
 }));
 
 export type SyncOperationRecord = typeof syncOperations.$inferSelect;
+
+/** Shop tenancy boundary: all business data belongs to one shop. */
+export const shops = mysqlTable("shops", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerUserId: int("ownerUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+  name: varchar("name", { length: 160 }).notNull(),
+  slug: varchar("slug", { length: 180 }).notNull().unique(),
+  currency: varchar("currency", { length: 3 }).default("LYD").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const shopMembers = mysqlTable("shop_members", {
+  id: int("id").autoincrement().primaryKey(),
+  shopId: int("shopId").notNull().references(() => shops.id, { onDelete: "cascade" }),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  role: mysqlEnum("role", ["owner", "manager", "cashier"]).default("cashier").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => ({
+  shopUserUnique: uniqueIndex("shop_members_shop_user_unique").on(table.shopId, table.userId),
+}));
+
+/** Monetary values are DECIMAL strings to avoid floating-point price drift. */
+export const products = mysqlTable("products", {
+  id: int("id").autoincrement().primaryKey(),
+  shopId: int("shopId").notNull().references(() => shops.id, { onDelete: "cascade" }),
+  sku: varchar("sku", { length: 100 }),
+  name: varchar("name", { length: 191 }).notNull(),
+  description: text("description"),
+  price: decimal("price", { precision: 12, scale: 3 }).notNull(),
+  stock: int("stock").default(0).notNull(),
+  status: mysqlEnum("status", ["active", "archived"]).default("active").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => ({
+  shopSkuUnique: uniqueIndex("products_shop_sku_unique").on(table.shopId, table.sku),
+  shopNameIdx: uniqueIndex("products_shop_name_unique").on(table.shopId, table.name),
+}));
+
+export const stockMovements = mysqlTable("stock_movements", {
+  id: int("id").autoincrement().primaryKey(),
+  shopId: int("shopId").notNull().references(() => shops.id, { onDelete: "cascade" }),
+  productId: int("productId").notNull().references(() => products.id, { onDelete: "restrict" }),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "restrict" }),
+  quantityDelta: int("quantityDelta").notNull(),
+  reason: mysqlEnum("reason", ["restock", "sale", "return", "adjustment"]).notNull(),
+  referenceId: varchar("referenceId", { length: 191 }),
+  note: varchar("note", { length: 500 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
