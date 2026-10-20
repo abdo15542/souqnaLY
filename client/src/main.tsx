@@ -9,6 +9,7 @@ import App from "./App";
 import { startLogin } from "./const";
 import { getSupportMessage, isSupportButtonVisible, LOCAL_SUPPORT_VISIBILITY_KEY, SUPPORT_VISIBILITY_EVENT } from "./lib/customerSupport";
 import { startAutomaticSync } from "./lib/autoSync";
+import SyncStatusIndicator from "./components/SyncStatusIndicator";
 import "./index.css";
 
 const queryClient = new QueryClient();
@@ -106,6 +107,7 @@ createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <App />
       <CustomerSupportLink />
+      <SyncStatusIndicator />
     </QueryClientProvider>
   </trpc.Provider>
 );
