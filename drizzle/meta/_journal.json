@@ -15,6 +15,13 @@
       "when": 1792512060000,
       "tag": "0002_shop_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792512120000,
+      "tag": "0003_pos_sales",
+      "breakpoints": true
     }
   ]
 }
