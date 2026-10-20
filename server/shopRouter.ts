@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { products, shopMembers, shops, stockMovements } from "../drizzle/schema";
@@ -65,6 +65,120 @@ export const shopRouter = router({
       await requireShopMembership(db, input.shopId, ctx.user.id);
       return db.select().from(products)
         .where(and(eq(products.shopId, input.shopId), eq(products.status, "active")));
+    }),
+
+  /** Full catalog for shop management, including archived items. POS should use products. */
+  catalog: protectedProcedure
+    .input(z.object({ shopId: shopIdSchema }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database is unavailable." });
+      await requireShopMembership(db, input.shopId, ctx.user.id);
+      return db.select().from(products)
+        .where(eq(products.shopId, input.shopId));
+    }),
+
+  updateProduct: protectedProcedure
+    .input(z.object({
+      shopId: shopIdSchema,
+      productId: z.number().int().positive(),
+      name: z.string().trim().min(1).max(191).optional(),
+      sku: z.string().trim().max(100).nullable().optional(),
+      description: z.string().max(5000).nullable().optional(),
+      price: z.number().finite().min(0).max(999999999.999).optional(),
+      status: z.enum(["active", "archived"]).optional(),
+    }).refine(input => input.name !== undefined || input.sku !== undefined ||
+      input.description !== undefined || input.price !== undefined || input.status !== undefined,
+    "Provide at least one product field to update"))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database is unavailable." });
+      const membership = await requireShopMembership(db, input.shopId, ctx.user.id);
+      if (membership.role === "cashier") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only the shop owner or manager can edit products." });
+      }
+
+      const patch: Partial<typeof products.$inferInsert> = {};
+      if (input.name !== undefined) patch.name = input.name;
+      if (input.sku !== undefined) patch.sku = input.sku || null;
+      if (input.description !== undefined) patch.description = input.description || null;
+      if (input.price !== undefined) patch.price = input.price.toFixed(3);
+      if (input.status !== undefined) patch.status = input.status;
+
+      const [existing] = await db.select({ id: products.id })
+        .from(products)
+        .where(and(eq(products.id, input.productId), eq(products.shopId, input.shopId)))
+        .limit(1);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Product was not found in this shop." });
+
+      await db.update(products).set(patch)
+        .where(and(eq(products.id, input.productId), eq(products.shopId, input.shopId)));
+      const [updated] = await db.select().from(products)
+        .where(and(eq(products.id, input.productId), eq(products.shopId, input.shopId)))
+        .limit(1);
+      return updated;
+    }),
+
+  /** Apply a stock delta and write its audit row atomically. */
+  adjustStock: protectedProcedure
+    .input(z.object({
+      shopId: shopIdSchema,
+      productId: z.number().int().positive(),
+      delta: z.number().int().min(-2_000_000_000).max(2_000_000_000).refine(value => value !== 0, "Stock adjustment cannot be zero"),
+      note: z.string().trim().max(500).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database is unavailable." });
+      const membership = await requireShopMembership(db, input.shopId, ctx.user.id);
+      if (membership.role === "cashier") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only the shop owner or manager can adjust stock." });
+      }
+
+      return db.transaction(async tx => {
+        const [product] = await tx.select({
+          id: products.id,
+          stock: products.stock,
+          status: products.status,
+          name: products.name,
+        }).from(products).where(and(
+          eq(products.id, input.productId),
+          eq(products.shopId, input.shopId),
+        )).limit(1);
+        if (!product) throw new TRPCError({ code: "NOT_FOUND", message: "Product was not found in this shop." });
+        if (product.status !== "active") {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Archived products cannot have stock adjusted." });
+        }
+        const nextStock = product.stock + input.delta;
+        if (nextStock < 0 || nextStock > 2_000_000_000) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Stock adjustment would put inventory outside the allowed range." });
+        }
+
+        const stockBounds = input.delta < 0
+          ? gte(products.stock, -input.delta)
+          : lte(products.stock, 2_000_000_000 - input.delta);
+        const changed = await tx.update(products)
+          .set({ stock: sql`${products.stock} + ${input.delta}` })
+          .where(and(
+            eq(products.id, input.productId),
+            eq(products.shopId, input.shopId),
+            eq(products.status, "active"),
+            stockBounds,
+          ));
+        if (Number(changed[0].affectedRows ?? 0) !== 1) {
+          throw new TRPCError({ code: "CONFLICT", message: "Stock changed concurrently. Refresh and try again." });
+        }
+
+        await tx.insert(stockMovements).values({
+          shopId: input.shopId,
+          productId: input.productId,
+          userId: ctx.user.id,
+          quantityDelta: input.delta,
+          reason: input.delta > 0 ? "restock" : "adjustment",
+          note: input.note || (input.delta > 0 ? "Stock replenishment" : "Manual stock reduction"),
+        });
+        return { productId: input.productId, previousStock: product.stock, stock: nextStock, delta: input.delta };
+      });
     }),
 
   createProduct: protectedProcedure
