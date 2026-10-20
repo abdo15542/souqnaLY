@@ -1,4 +1,4 @@
-import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { products, shopMembers, shops, stockMovements } from "../drizzle/schema";
@@ -65,6 +65,35 @@ export const shopRouter = router({
       await requireShopMembership(db, input.shopId, ctx.user.id);
       return db.select().from(products)
         .where(and(eq(products.shopId, input.shopId), eq(products.status, "active")));
+    }),
+
+  stockHistory: protectedProcedure
+    .input(z.object({
+      shopId: shopIdSchema,
+      productId: z.number().int().positive().optional(),
+      limit: z.number().int().min(1).max(200).default(50),
+    }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database is unavailable." });
+      await requireShopMembership(db, input.shopId, ctx.user.id);
+      const conditions = [eq(stockMovements.shopId, input.shopId)];
+      if (input.productId !== undefined) conditions.push(eq(stockMovements.productId, input.productId));
+      return db.select({
+        id: stockMovements.id,
+        productId: stockMovements.productId,
+        productName: products.name,
+        userId: stockMovements.userId,
+        quantityDelta: stockMovements.quantityDelta,
+        reason: stockMovements.reason,
+        referenceId: stockMovements.referenceId,
+        note: stockMovements.note,
+        createdAt: stockMovements.createdAt,
+      }).from(stockMovements)
+        .innerJoin(products, eq(stockMovements.productId, products.id))
+        .where(and(...conditions))
+        .orderBy(desc(stockMovements.createdAt), desc(stockMovements.id))
+        .limit(input.limit);
     }),
 
   /** Full catalog for shop management, including archived items. POS should use products. */
