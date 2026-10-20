@@ -1,4 +1,4 @@
-import { decimal, int, json, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { decimal, index, int, json, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -90,7 +90,7 @@ export const products = mysqlTable("products", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => ({
   shopSkuUnique: uniqueIndex("products_shop_sku_unique").on(table.shopId, table.sku),
-  shopNameIdx: uniqueIndex("products_shop_name_unique").on(table.shopId, table.name),
+  shopNameIdx: index("products_shop_name_idx").on(table.shopId, table.name),
 }));
 
 export const stockMovements = mysqlTable("stock_movements", {

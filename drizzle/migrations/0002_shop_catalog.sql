@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS `products` (
   `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `products_shop_sku_unique` (`shopId`, `sku`),
-  UNIQUE KEY `products_shop_name_unique` (`shopId`, `name`),
+  KEY `products_shop_name_idx` (`shopId`, `name`),
   CONSTRAINT `products_shop_fk` FOREIGN KEY (`shopId`) REFERENCES `shops` (`id`) ON DELETE CASCADE
 );
 
