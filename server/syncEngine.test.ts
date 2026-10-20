@@ -36,6 +36,33 @@ describe("offline-first synchronization outbox", () => {
     expect((await store.read()).map(item => item.id)).toEqual(["same-id"]);
   });
 
+  it("serializes concurrent enqueue calls so no operation is lost", async () => {
+    const store = memoryStore();
+    const first = createSyncOperation("sale.create", "sale-1", {}, new Date(), "first");
+    const second = createSyncOperation("sale.create", "sale-2", {}, new Date(), "second");
+    await Promise.all([enqueueSyncOperation(store, first), enqueueSyncOperation(store, second)]);
+    expect((await store.read()).map(item => item.id).sort()).toEqual(["first", "second"]);
+  });
+
+  it("preserves operations enqueued while a network request is in flight", async () => {
+    const store = memoryStore([
+      createSyncOperation("sale.create", "sale-1", {}, new Date(), "sent"),
+    ]);
+    let releaseTransport!: (result: { acknowledgedIds: string[] }) => void;
+    let startedTransport!: () => void;
+    const transportStarted = new Promise<void>(resolve => { startedTransport = resolve; });
+    const transportResult = new Promise<{ acknowledgedIds: string[] }>(resolve => { releaseTransport = resolve; });
+    const syncing = syncPendingOperations(store, async () => {
+      startedTransport();
+      return transportResult;
+    });
+    await transportStarted;
+    await enqueueSyncOperation(store, createSyncOperation("sale.create", "sale-2", {}, new Date(), "arrived-during-sync"));
+    releaseTransport({ acknowledgedIds: ["sent"] });
+    await syncing;
+    expect((await store.read()).map(item => item.id)).toEqual(["arrived-during-sync"]);
+  });
+
   it("removes only operations explicitly acknowledged by the server", async () => {
     const first = createSyncOperation("sale.create", "sale-1", {}, new Date(), "one");
     const second = createSyncOperation("stock.adjust", "product-2", {}, new Date(), "two");
