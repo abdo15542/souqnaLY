@@ -1,5 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { syncOperations } from "../drizzle/schema";
 import { protectedProcedure, router } from "./_core/trpc";
@@ -23,6 +24,15 @@ const operationSchema = z.object({
   lastError: z.string().max(2000).optional(),
 });
 
+const stableJson = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "undefined";
+};
+
 export const syncRouter = router({
   /**
    * Persist device operations in a per-user inbox before acknowledging them.
@@ -34,7 +44,7 @@ export const syncRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) {
-        throw new Error("Sync storage is unavailable; operations remain on this device.");
+        throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Sync storage is unavailable; operations remain on this device." });
       }
 
       const seen = new Set<string>();
@@ -77,8 +87,8 @@ export const syncRouter = router({
         const sameContent =
           row.kind === operation.kind &&
           row.entityId === operation.entityId &&
-          JSON.stringify(row.payload) === JSON.stringify(operation.payload) &&
-          new Date(row.clientCreatedAt).toISOString() === new Date(operation.createdAt).toISOString();
+          stableJson(row.payload) === stableJson(operation.payload) &&
+          Math.floor(new Date(row.clientCreatedAt).getTime() / 1000) === Math.floor(Date.parse(operation.createdAt) / 1000);
 
         if (sameContent) {
           acknowledgedIds.push(operation.id);
