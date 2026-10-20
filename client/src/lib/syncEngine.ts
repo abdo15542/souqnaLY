@@ -181,12 +181,23 @@ export async function syncPendingOperations(
 }
 
 /** Adapter backed by the existing IndexedDB/localStorage persistence layer. */
+let cachedLocalOutbox: {
+  readRecord: <T>(key: string) => Promise<T | null>;
+  writeRecord: <T>(key: string, value: T) => Promise<void>;
+  store: SyncOutboxStore;
+} | undefined;
+
 export function createLocalSyncOutbox(
   readRecord: <T>(key: string) => Promise<T | null>,
   writeRecord: <T>(key: string, value: T) => Promise<void>,
 ): SyncOutboxStore {
+  // Share one store identity so the per-store lock also protects concurrent
+  // enqueue calls made by different app modules using the same persistence API.
+  if (cachedLocalOutbox?.readRecord === readRecord && cachedLocalOutbox.writeRecord === writeRecord) {
+    return cachedLocalOutbox.store;
+  }
   const key = "souqna-sync-outbox-v1";
-  return {
+  const store: SyncOutboxStore = {
     async read() {
       return (await readRecord<SyncOperation[]>(key)) ?? [];
     },
@@ -194,4 +205,6 @@ export function createLocalSyncOutbox(
       await writeRecord(key, operations);
     },
   };
+  cachedLocalOutbox = { readRecord, writeRecord, store };
+  return store;
 }
