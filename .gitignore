@@ -1,0 +1,38 @@
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+# Node.js / Web dependencies
+node_modules/
+dist/
+build/web/
+.next/
+out/
+
+# Env files
+.env
+.env.local
+*.log
+
+# IDE
+.vscode/
+.idea/
+# Web / Node artifacts
+node_modules/
+package.json
+pnpm-lock.yaml
+drizzle.config.ts
+components.json
+client/
+dist/
+build/web/
+.next/
+out/
+.env

@@ -1,0 +1,202 @@
+class Product {
+  final int? id;
+  final String name;
+  final String category;
+  final String unit;
+  final String barcode;
+  final double buyPrice;
+  final double sellPrice;
+  final double qty;
+  final double minQty;
+  final bool isActive;
+  final String createdAt;
+  final String updatedAt;
+
+  Product({this.id, required this.name, this.category = '', this.unit = 'حبة', this.barcode = '', required this.buyPrice, required this.sellPrice, required this.qty, this.minQty = 0, this.isActive = true, this.createdAt = '', this.updatedAt = ''});
+
+  Map<String, dynamic> toMap() {
+    final now = DateTime.now().toIso8601String();
+    return {'name': name, 'category': category, 'unit': unit, 'barcode': barcode, 'buy_price': buyPrice, 'sell_price': sellPrice, 'qty': qty, 'min_qty': minQty, 'is_active': isActive ? 1 : 0, 'created_at': createdAt.isEmpty ? now : createdAt, 'updated_at': now};
+  }
+
+  factory Product.fromMap(Map<String, dynamic> m) => Product(id: m['id'] as int?, name: m['name'] as String, category: (m['category'] as String?) ?? '', unit: (m['unit'] as String?) ?? 'حبة', barcode: (m['barcode'] as String?) ?? '', buyPrice: (m['buy_price'] as num).toDouble(), sellPrice: (m['sell_price'] as num).toDouble(), qty: (m['qty'] as num).toDouble(), minQty: (m['min_qty'] as num?)?.toDouble() ?? 0, isActive: ((m['is_active'] as int?) ?? 1) == 1, createdAt: (m['created_at'] as String?) ?? '', updatedAt: (m['updated_at'] as String?) ?? '');
+
+  bool get isLow => qty <= minQty;
+}
+
+class CartLine {
+  final Product product;
+  double qty;
+  CartLine({required this.product, required this.qty});
+  double get total => product.sellPrice * qty;
+}
+
+class SaleItem {
+  final int? id;
+  final int saleId;
+  final int? productId;
+  final String name;
+  final double price;
+  final double cost;
+  final double qty;
+
+  SaleItem({this.id, required this.saleId, this.productId, required this.name, required this.price, required this.cost, required this.qty});
+  double get total => price * qty;
+  double get profit => (price - cost) * qty;
+
+  factory SaleItem.fromMap(Map<String, dynamic> m) => SaleItem(id: m['id'] as int?, saleId: m['sale_id'] as int, productId: m['product_id'] as int?, name: m['name'] as String, price: (m['price'] as num).toDouble(), cost: (m['cost_price'] as num?)?.toDouble() ?? 0, qty: (m['qty'] as num).toDouble());
+}
+
+class Sale {
+  final int id;
+  final double total;
+  final double cost;
+  final int? cashierId;
+  final String createdAt;
+  final List<SaleItem> items;
+  final String? refundedAt;
+  final int? refundedBy;
+  final String refundNote;
+
+  Sale({required this.id, required this.total, required this.cost, this.cashierId, required this.createdAt, required this.items, this.refundedAt, this.refundedBy, this.refundNote = ''});
+  double get profit => total - cost;
+  bool get isRefunded => refundedAt != null;
+
+  factory Sale.fromMaps(Map<String, dynamic> s, List<Map<String, dynamic>> items) => Sale(id: s['id'] as int, total: (s['total'] as num).toDouble(), cost: (s['cost'] as num?)?.toDouble() ?? 0, cashierId: s['cashier_id'] as int?, createdAt: s['created_at'] as String, items: items.map(SaleItem.fromMap).toList(), refundedAt: s['refunded_at'] as String?, refundedBy: s['refunded_by'] as int?, refundNote: (s['refund_note'] as String?) ?? '');
+}
+
+class SalesStats {
+  final int count;
+  final double revenue;
+  final double cost;
+  final double profit;
+  const SalesStats({required this.count, required this.revenue, required this.cost, required this.profit});
+  factory SalesStats.empty() => const SalesStats(count: 0, revenue: 0, cost: 0, profit: 0);
+}
+
+class RefundsSummary {
+  final int count;
+  final double total;
+  const RefundsSummary({required this.count, required this.total});
+  factory RefundsSummary.empty() => const RefundsSummary(count: 0, total: 0);
+}
+
+class Expense {
+  final int? id;
+  final String category;
+  final double amount;
+  final String note;
+  final int? cashierId;
+  final String createdAt;
+
+  Expense({this.id, required this.category, required this.amount, this.note = '', this.cashierId, required this.createdAt});
+  Map<String, dynamic> toMap() => {'category': category, 'amount': amount, 'note': note, 'cashier_id': cashierId, 'created_at': createdAt};
+  factory Expense.fromMap(Map<String, dynamic> m) => Expense(id: m['id'] as int?, category: m['category'] as String, amount: (m['amount'] as num).toDouble(), note: (m['note'] as String?) ?? '', cashierId: m['cashier_id'] as int?, createdAt: m['created_at'] as String);
+}
+
+class ExpensesSummary {
+  final int count;
+  final double total;
+  const ExpensesSummary({required this.count, required this.total});
+  factory ExpensesSummary.empty() => const ExpensesSummary(count: 0, total: 0);
+}
+
+class Cashier {
+  final int? id;
+  final String name;
+  final String pinHash;
+  final String pinSalt;
+  final bool isActive;
+  final String createdAt;
+
+  Cashier({this.id, required this.name, this.pinHash = '', this.pinSalt = '', this.isActive = true, this.createdAt = ''});
+  factory Cashier.fromMap(Map<String, dynamic> m) => Cashier(id: m['id'] as int?, name: m['name'] as String, pinHash: (m['pin_hash'] as String?) ?? '', pinSalt: (m['pin_salt'] as String?) ?? '', isActive: ((m['is_active'] as int?) ?? 1) == 1, createdAt: (m['created_at'] as String?) ?? '');
+}
+
+class StockTake {
+  final int id;
+  final int? cashierId;
+  final String cashierName;
+  final String note;
+  final int itemsCount;
+  final double totalDiff;
+  final String createdAt;
+
+  StockTake({required this.id, this.cashierId, required this.cashierName, required this.note, required this.itemsCount, required this.totalDiff, required this.createdAt});
+  factory StockTake.fromMap(Map<String, dynamic> m) => StockTake(id: m['id'] as int, cashierId: m['cashier_id'] as int?, cashierName: (m['cashier_name'] as String?) ?? '', note: (m['note'] as String?) ?? '', itemsCount: (m['items_count'] as int?) ?? 0, totalDiff: (m['total_diff'] as num?)?.toDouble() ?? 0, createdAt: m['created_at'] as String);
+}
+
+class StockTakeItem {
+  final int? id;
+  final int takeId;
+  final int? productId;
+  final String name;
+  final double previousQty;
+  final double countedQty;
+  StockTakeItem({this.id, required this.takeId, this.productId, required this.name, required this.previousQty, required this.countedQty});
+  double get diff => countedQty - previousQty;
+  factory StockTakeItem.fromMap(Map<String, dynamic> m) => StockTakeItem(id: m['id'] as int?, takeId: m['take_id'] as int, productId: m['product_id'] as int?, name: m['name'] as String, previousQty: (m['previous_qty'] as num).toDouble(), countedQty: (m['counted_qty'] as num).toDouble());
+}
+
+class StockTakeLine {
+  final Product product;
+  final double countedQty;
+  StockTakeLine({required this.product, required this.countedQty});
+  double get diff => countedQty - product.qty;
+}
+
+class AuditEntry {
+  final int? id;
+  final int? cashierId;
+  final String cashierName;
+  final String action;
+  final String entity;
+  final int? entityId;
+  final String details;
+  final String createdAt;
+
+  AuditEntry({this.id, this.cashierId, required this.cashierName, required this.action, required this.entity, this.entityId, required this.details, required this.createdAt});
+  factory AuditEntry.fromMap(Map<String, dynamic> m) => AuditEntry(id: m['id'] as int?, cashierId: m['cashier_id'] as int?, cashierName: (m['cashier_name'] as String?) ?? '', action: m['action'] as String, entity: (m['entity'] as String?) ?? '', entityId: m['entity_id'] as int?, details: (m['details'] as String?) ?? '', createdAt: m['created_at'] as String);
+}
+
+class Debt {
+  final int? id;
+  final String customer;
+  final String phone;
+  final double amount;
+  final double paid;
+  final String note;
+  final String createdAt;
+
+  Debt({this.id, required this.customer, this.phone = '', required this.amount, this.paid = 0, this.note = '', required this.createdAt});
+  double get remaining => amount - paid;
+  Map<String, dynamic> toNewMap() => {'customer': customer, 'phone': phone, 'amount': amount, 'paid': paid, 'note': note, 'created_at': createdAt};
+  factory Debt.fromMap(Map<String, dynamic> m) => Debt(id: m['id'] as int?, customer: m['customer'] as String, phone: (m['phone'] as String?) ?? '', amount: (m['amount'] as num).toDouble(), paid: (m['paid'] as num?)?.toDouble() ?? 0, note: (m['note'] as String?) ?? '', createdAt: m['created_at'] as String);
+}
+
+class DebtPayment {
+  final int? id;
+  final int debtId;
+  final double amount;
+  final String createdAt;
+  DebtPayment({this.id, required this.debtId, required this.amount, required this.createdAt});
+  factory DebtPayment.fromMap(Map<String, dynamic> m) => DebtPayment(id: m['id'] as int?, debtId: m['debt_id'] as int, amount: (m['amount'] as num).toDouble(), createdAt: m['created_at'] as String);
+}
+
+class DebtsSummary {
+  final int count;
+  final double total;
+  final double paid;
+  final double remaining;
+  const DebtsSummary({required this.count, required this.total, required this.paid, required this.remaining});
+  factory DebtsSummary.empty() => const DebtsSummary(count: 0, total: 0, paid: 0, remaining: 0);
+}
+
+class AppSettings {
+  final String shopName;
+  final String phone;
+  final String address;
+  final String currency;
+  const AppSettings({required this.shopName, required this.phone, required this.address, required this.currency});
+  factory AppSettings.defaults() => const AppSettings(shopName: 'سوقنا', phone: '', address: '', currency: 'د.ل');
+}

@@ -1,0 +1,16 @@
+# قالب متغيرات البيئة — انسخه إلى ملف محلي خاص بك، ولا ترفعه إلى GitHub
+DATABASE_URL=
+JWT_SECRET=
+BUILT_IN_FORGE_API_KEY=
+BUILT_IN_FORGE_API_URL=https://forge.manus.ai
+OAUTH_SERVER_URL=https://api.manus.im
+OWNER_NAME=
+OWNER_OPEN_ID=
+VITE_APP_ID=
+VITE_FRONTEND_FORGE_API_KEY=
+VITE_FRONTEND_FORGE_API_URL=https://forge.manus.ai
+VITE_OAUTH_PORTAL_URL=https://manus.im
+VITE_ANALYTICS_ENDPOINT=
+VITE_ANALYTICS_WEBSITE_ID=
+VITE_APP_LOGO=
+VITE_APP_TITLE=سوقنا — إدارة المحلات الصغيرة
