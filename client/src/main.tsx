@@ -43,7 +43,7 @@ const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
       url: import.meta.env.VITE_API_BASE_URL?.trim()
-        ? `${import.meta.env.VITE_API_BASE_URL.trim().replace(/\\/$/, "")}/api/trpc`
+        ? `${import.meta.env.VITE_API_BASE_URL.trim().replace(/\/+$/, "")}/api/trpc`
         : "/api/trpc",
       transformer: superjson,
       headers() {
