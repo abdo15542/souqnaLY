@@ -1,3 +1,4 @@
+import { COOKIE_NAME } from "@shared/const";
 import type { SyncOperation, SyncPushResult, SyncTransport } from "./syncEngine";
 
 type TrpcEnvelope = {
@@ -27,7 +28,7 @@ export const createAuthenticatedSyncTransport = (): SyncTransport => async (oper
   try {
     const raw = sessionStorage.getItem("manus-cookie");
     if (raw) {
-      const prefix = "manus-session=";
+      const prefix = `${COOKIE_NAME}=`;
       const token = raw.split(";").find(part => part.trim().startsWith(prefix))?.trim().slice(prefix.length);
       if (token) headers.Authorization = "Bearer " + token;
     }
