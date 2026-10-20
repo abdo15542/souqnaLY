@@ -1,0 +1,67 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - feature/android-apk-pipeline
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    name: Build installable Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build web client and server bundle
+        run: pnpm build
+
+      - name: Generate Android project
+        run: pnpm exec cap add android
+
+      - name: Sync web assets into Android project
+        run: pnpm exec cap sync android
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: souqna-ly-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
