@@ -47,6 +47,21 @@ export type SyncBatchSummary = {
 };
 
 const MAX_BATCH_SIZE = 50;
+const storeLockTails = new WeakMap<SyncOutboxStore, Promise<void>>();
+
+async function withStoreLock<T>(store: SyncOutboxStore, task: () => Promise<T>): Promise<T> {
+  const previous = storeLockTails.get(store) ?? Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const tail = previous.then(() => gate, () => gate);
+  storeLockTails.set(store, tail);
+  await previous.catch(() => undefined);
+  try {
+    return await task();
+  } finally {
+    release();
+  }
+}
 
 function makeOperationId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -75,83 +90,93 @@ export function createSyncOperation<TPayload>(
   };
 }
 
-/** Idempotently appends a local operation without replacing existing work. */
+/** Serializes read-modify-write so concurrent enqueue calls cannot lose work. */
 export async function enqueueSyncOperation(
   store: SyncOutboxStore,
   operation: SyncOperation,
 ): Promise<{ inserted: boolean; pending: number }> {
-  const current = await store.read();
-  if (current.some(item => item.id === operation.id)) {
-    return { inserted: false, pending: current.length };
-  }
-  await store.write([...current, operation]);
-  return { inserted: true, pending: current.length + 1 };
+  return withStoreLock(store, async () => {
+    const current = await store.read();
+    if (current.some(item => item.id === operation.id)) {
+      return { inserted: false, pending: current.length };
+    }
+    await store.write([...current, operation]);
+    return { inserted: true, pending: current.length + 1 };
+  });
 }
 
 /**
  * Sends a bounded batch. Only explicit server acknowledgements remove items.
  * Network errors, missing acknowledgements and retryable rejections stay local.
+ * The network call runs outside the store lock; merging uses the latest queue
+ * snapshot so operations added while the request is in flight are preserved.
  */
 export async function syncPendingOperations(
   store: SyncOutboxStore,
   transport: SyncTransport,
 ): Promise<SyncBatchSummary> {
-  const current = await store.read();
+  const current = await withStoreLock(store, () => store.read());
   const batch = current.slice(0, MAX_BATCH_SIZE);
   if (batch.length === 0) {
     return { attempted: 0, acknowledged: 0, remaining: 0, failed: 0 };
   }
+  const batchIds = new Set(batch.map(item => item.id));
 
   let result: SyncPushResult;
   try {
     result = await transport(batch);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Network request failed";
-    const failedIds = new Set(batch.map(item => item.id));
-    await store.write(current.map(item => failedIds.has(item.id)
-      ? { ...item, attemptCount: item.attemptCount + 1, updatedAt: new Date().toISOString(), lastError: message }
-      : item));
-    return { attempted: batch.length, acknowledged: 0, remaining: current.length, failed: batch.length };
+    return withStoreLock(store, async () => {
+      const latest = await store.read();
+      await store.write(latest.map(item => batchIds.has(item.id)
+        ? { ...item, attemptCount: item.attemptCount + 1, updatedAt: new Date().toISOString(), lastError: message }
+        : item));
+      return { attempted: batch.length, acknowledged: 0, remaining: latest.length, failed: batch.length };
+    });
   }
 
-  const batchIds = new Set(batch.map(item => item.id));
   const acknowledgedIds = new Set(result.acknowledgedIds.filter(id => batchIds.has(id)));
   const rejections = new Map((result.rejected ?? []).map(item => [item.id, item]));
-  const remaining: SyncOperation[] = [];
-  let failed = 0;
 
-  for (const item of current) {
-    if (acknowledgedIds.has(item.id)) continue;
-    const rejection = rejections.get(item.id);
-    if (rejection && !rejection.retryable) {
-      // Keep non-retryable conflicts visible for resolution; never silently drop them.
-      remaining.push({
-        ...item,
-        attemptCount: item.attemptCount + 1,
-        updatedAt: new Date().toISOString(),
-        lastError: `Conflict requires resolution: ${rejection.reason}`,
-      });
-      failed++;
-    } else if (batchIds.has(item.id)) {
-      remaining.push({
-        ...item,
-        attemptCount: item.attemptCount + 1,
-        updatedAt: new Date().toISOString(),
-        lastError: rejection?.reason ?? "Server did not acknowledge operation",
-      });
-      failed++;
-    } else {
-      remaining.push(item);
+  return withStoreLock(store, async () => {
+    const latest = await store.read();
+    const remaining: SyncOperation[] = [];
+    let failed = 0;
+
+    for (const item of latest) {
+      if (acknowledgedIds.has(item.id)) continue;
+      const rejection = rejections.get(item.id);
+      if (rejection && !rejection.retryable) {
+        // Keep non-retryable conflicts visible for resolution; never silently drop them.
+        remaining.push({
+          ...item,
+          attemptCount: item.attemptCount + 1,
+          updatedAt: new Date().toISOString(),
+          lastError: `Conflict requires resolution: ${rejection.reason}`,
+        });
+        failed++;
+      } else if (batchIds.has(item.id)) {
+        remaining.push({
+          ...item,
+          attemptCount: item.attemptCount + 1,
+          updatedAt: new Date().toISOString(),
+          lastError: rejection?.reason ?? "Server did not acknowledge operation",
+        });
+        failed++;
+      } else {
+        remaining.push(item);
+      }
     }
-  }
 
-  await store.write(remaining);
-  return {
-    attempted: batch.length,
-    acknowledged: acknowledgedIds.size,
-    remaining: remaining.length,
-    failed,
-  };
+    await store.write(remaining);
+    return {
+      attempted: batch.length,
+      acknowledged: acknowledgedIds.size,
+      remaining: remaining.length,
+      failed,
+    };
+  });
 }
 
 /** Adapter backed by the existing IndexedDB/localStorage persistence layer. */
