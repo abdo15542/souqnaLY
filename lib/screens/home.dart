@@ -20,6 +20,9 @@ import 'shifts.dart';
 import 'batches.dart';
 import 'advanced_analytics.dart';
 import 'data_health.dart';
+import 'market_basket.dart';
+import 'eoq_screen.dart';
+import 'audit_chain.dart';
 import 'stock_take.dart';
 import 'suppliers.dart';
 import '../utils.dart';
@@ -254,6 +257,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         _act('الدفعات والصلاحية', Icons.inventory, const BatchesScreen()),
                         _act('تحليل متقدم', Icons.query_stats, const AdvancedAnalyticsScreen()),
                         _act('فحص البيانات', Icons.medical_services, const DataHealthScreen()),
+                        _act('سلة السوق', Icons.shopping_basket, const MarketBasketScreen()),
+                        _act('اقتصاديات المخزون', Icons.calculate, const EoqScreen()),
+                        _act('سلسلة التدقيق', Icons.lock, const AuditChainScreen()),
                         _act('الموظفون والرواتب', Icons.badge,
                             const EmployeesScreen()),
                         _act('الكاشيرين', Icons.people, const CashiersScreen()),

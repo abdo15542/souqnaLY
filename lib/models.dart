@@ -902,3 +902,91 @@ class Batch {
         createdAt: m['created_at'] as String,
       );
 }
+
+class EoqItem {
+  final Product product;
+  final double annualDemand;
+  final double dailyDemand;
+  final double eoq;
+  final double reorderPoint;
+  final double daysOnHand;
+  final double turnover;
+  final double urgency;
+  final String abcClass;
+
+  EoqItem({
+    required this.product,
+    required this.annualDemand,
+    required this.dailyDemand,
+    required this.eoq,
+    required this.reorderPoint,
+    required this.daysOnHand,
+    required this.turnover,
+    required this.urgency,
+    required this.abcClass,
+  });
+}
+
+class BasketPair {
+  final String nameA;
+  final String nameB;
+  final double support;
+  final double confidenceAB;
+  final double confidenceBA;
+  final double lift;
+  final int bothCount;
+
+  BasketPair({
+    required this.nameA,
+    required this.nameB,
+    required this.support,
+    required this.confidenceAB,
+    required this.confidenceBA,
+    required this.lift,
+    required this.bothCount,
+  });
+}
+
+class AuditChainRecord {
+  final int seq;
+  final int auditId;
+  final String action;
+  final String details;
+  final String createdAt;
+  final String prevHash;
+  final String recordHash;
+
+  AuditChainRecord({
+    required this.seq,
+    required this.auditId,
+    required this.action,
+    required this.details,
+    required this.createdAt,
+    required this.prevHash,
+    required this.recordHash,
+  });
+
+  factory AuditChainRecord.fromMap(Map<String, dynamic> m) => AuditChainRecord(
+        seq: (m['seq'] as num?)?.toInt() ?? 0,
+        auditId: (m['audit_id'] as num?)?.toInt() ?? 0,
+        action: (m['action'] as String?) ?? '',
+        details: (m['details'] as String?) ?? '',
+        createdAt: (m['created_at'] as String?) ?? '',
+        prevHash: (m['prev_hash'] as String?) ?? '',
+        recordHash: (m['record_hash'] as String?) ?? '',
+      );
+}
+
+class ChainVerifyResult {
+  final bool ok;
+  final int checked;
+  final int? brokenAtSeq;
+  final String message;
+
+  const ChainVerifyResult({
+    required this.ok,
+    required this.checked,
+    this.brokenAtSeq,
+    required this.message,
+  });
+}
