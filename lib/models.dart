@@ -822,3 +822,83 @@ class ForecastPoint {
     required this.predictedRevenue,
   });
 }
+
+class Shift {
+  final int? id;
+  final int? cashierId;
+  final String cashierName;
+  final double openingFloat;
+  final double closingActual;
+  final double expected;
+  final double difference;
+  final String note;
+  final String status;
+  final String openedAt;
+  final String? closedAt;
+
+  Shift({
+    this.id,
+    this.cashierId,
+    required this.cashierName,
+    required this.openingFloat,
+    this.closingActual = 0,
+    this.expected = 0,
+    this.difference = 0,
+    this.note = '',
+    required this.status,
+    required this.openedAt,
+    this.closedAt,
+  });
+
+  bool get isOpen => status == 'open';
+
+  factory Shift.fromMap(Map<String, dynamic> m) => Shift(
+        id: m['id'] as int?,
+        cashierId: m['cashier_id'] as int?,
+        cashierName: (m['cashier_name'] as String?) ?? '',
+        openingFloat: (m['opening_float'] as num?)?.toDouble() ?? 0,
+        closingActual: (m['closing_actual'] as num?)?.toDouble() ?? 0,
+        expected: (m['expected'] as num?)?.toDouble() ?? 0,
+        difference: (m['difference'] as num?)?.toDouble() ?? 0,
+        note: (m['note'] as String?) ?? '',
+        status: (m['status'] as String?) ?? 'open',
+        openedAt: m['opened_at'] as String,
+        closedAt: m['closed_at'] as String?,
+      );
+}
+
+class Batch {
+  final int? id;
+  final int? productId;
+  final String productName;
+  final double qty;
+  final double costPrice;
+  final String producedAt;
+  final String expiresAt;
+  final String note;
+  final String createdAt;
+
+  Batch({
+    this.id,
+    this.productId,
+    required this.productName,
+    required this.qty,
+    this.costPrice = 0,
+    this.producedAt = '',
+    required this.expiresAt,
+    this.note = '',
+    required this.createdAt,
+  });
+
+  factory Batch.fromMap(Map<String, dynamic> m) => Batch(
+        id: m['id'] as int?,
+        productId: m['product_id'] as int?,
+        productName: (m['product_name'] as String?) ?? '',
+        qty: (m['qty'] as num?)?.toDouble() ?? 0,
+        costPrice: (m['cost_price'] as num?)?.toDouble() ?? 0,
+        producedAt: (m['produced_at'] as String?) ?? '',
+        expiresAt: m['expires_at'] as String,
+        note: (m['note'] as String?) ?? '',
+        createdAt: m['created_at'] as String,
+      );
+}

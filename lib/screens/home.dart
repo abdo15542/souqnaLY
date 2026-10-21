@@ -16,6 +16,8 @@ import 'reports.dart';
 import 'sales_history.dart';
 import 'settings.dart';
 import 'smart_insights.dart';
+import 'shifts.dart';
+import 'batches.dart';
 import 'stock_take.dart';
 import 'suppliers.dart';
 import '../utils.dart';
@@ -246,6 +248,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         _act('التقارير', Icons.bar_chart, const ReportsScreen()),
                         _act('العقل المحلي', Icons.insights, const SmartInsightsScreen()),
+                        _act('نوبات الصندوق', Icons.point_of_sale, const ShiftsScreen()),
+                        _act('الدفعات والصلاحية', Icons.inventory, const BatchesScreen()),
                         _act('الموظفون والرواتب', Icons.badge,
                             const EmployeesScreen()),
                         _act('الكاشيرين', Icons.people, const CashiersScreen()),
