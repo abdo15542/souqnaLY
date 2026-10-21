@@ -414,3 +414,168 @@ class AppSettings {
   factory AppSettings.defaults() => const AppSettings(
       shopName: 'سوقنا', phone: '', address: '', currency: 'د.ل');
 }
+
+class Supplier {
+  final int? id;
+  final String name;
+  final String phone;
+  final String address;
+  final String note;
+  final bool isActive;
+  final String createdAt;
+  final String updatedAt;
+
+  Supplier({
+    this.id,
+    required this.name,
+    this.phone = '',
+    this.address = '',
+    this.note = '',
+    this.isActive = true,
+    this.createdAt = '',
+    this.updatedAt = '',
+  });
+
+  Map<String, dynamic> toMap() {
+    final now = DateTime.now().toIso8601String();
+    return {
+      'name': name,
+      'phone': phone,
+      'address': address,
+      'note': note,
+      'is_active': isActive ? 1 : 0,
+      'created_at': createdAt.isEmpty ? now : createdAt,
+      'updated_at': now,
+    };
+  }
+
+  factory Supplier.fromMap(Map<String, dynamic> m) => Supplier(
+        id: m['id'] as int?,
+        name: m['name'] as String,
+        phone: (m['phone'] as String?) ?? '',
+        address: (m['address'] as String?) ?? '',
+        note: (m['note'] as String?) ?? '',
+        isActive: ((m['is_active'] as int?) ?? 1) == 1,
+        createdAt: (m['created_at'] as String?) ?? '',
+        updatedAt: (m['updated_at'] as String?) ?? '',
+      );
+}
+
+class POLine {
+  final Product product;
+  double qty;
+  double cost;
+  POLine({required this.product, required this.qty, required this.cost});
+  double get total => qty * cost;
+}
+
+class PurchaseOrderItem {
+  final int? id;
+  final int poId;
+  final int? productId;
+  final String name;
+  final double qty;
+  final double costPrice;
+  final double receivedQty;
+
+  PurchaseOrderItem({
+    this.id,
+    required this.poId,
+    this.productId,
+    required this.name,
+    required this.qty,
+    required this.costPrice,
+    this.receivedQty = 0,
+  });
+
+  double get total => qty * costPrice;
+  double get remaining => qty - receivedQty;
+
+  factory PurchaseOrderItem.fromMap(Map<String, dynamic> m) =>
+      PurchaseOrderItem(
+        id: m['id'] as int?,
+        poId: m['po_id'] as int,
+        productId: m['product_id'] as int?,
+        name: m['name'] as String,
+        qty: (m['qty'] as num).toDouble(),
+        costPrice: (m['cost_price'] as num?)?.toDouble() ?? 0,
+        receivedQty: (m['received_qty'] as num?)?.toDouble() ?? 0,
+      );
+}
+
+class PurchaseOrder {
+  final int id;
+  final int? supplierId;
+  final String supplierName;
+  final String status;
+  final double total;
+  final String note;
+  final int? createdBy;
+  final String createdAt;
+  final String? receivedAt;
+  final List<PurchaseOrderItem> items;
+
+  PurchaseOrder({
+    required this.id,
+    this.supplierId,
+    required this.supplierName,
+    required this.status,
+    required this.total,
+    required this.note,
+    this.createdBy,
+    required this.createdAt,
+    this.receivedAt,
+    required this.items,
+  });
+
+  bool get isReceived => status == 'received';
+  bool get isCancelled => status == 'cancelled';
+  bool get isDraft => status == 'draft';
+
+  factory PurchaseOrder.fromMaps(
+          Map<String, dynamic> p, List<Map<String, dynamic>> it) =>
+      PurchaseOrder(
+        id: p['id'] as int,
+        supplierId: p['supplier_id'] as int?,
+        supplierName: (p['supplier_name'] as String?) ?? '',
+        status: (p['status'] as String?) ?? 'draft',
+        total: (p['total'] as num?)?.toDouble() ?? 0,
+        note: (p['note'] as String?) ?? '',
+        createdBy: p['created_by'] as int?,
+        createdAt: p['created_at'] as String,
+        receivedAt: p['received_at'] as String?,
+        items: it.map(PurchaseOrderItem.fromMap).toList(),
+      );
+}
+
+class PriceChange {
+  final int? id;
+  final int? productId;
+  final String productName;
+  final double oldPrice;
+  final double newPrice;
+  final int? poId;
+  final String createdAt;
+
+  PriceChange({
+    this.id,
+    this.productId,
+    required this.productName,
+    required this.oldPrice,
+    required this.newPrice,
+    this.poId,
+    required this.createdAt,
+  });
+
+  double get diff => newPrice - oldPrice;
+
+  factory PriceChange.fromMap(Map<String, dynamic> m) => PriceChange(
+        id: m['id'] as int?,
+        productId: m['product_id'] as int?,
+        productName: (m['product_name'] as String?) ?? '',
+        oldPrice: (m['old_price'] as num?)?.toDouble() ?? 0,
+        newPrice: (m['new_price'] as num?)?.toDouble() ?? 0,
+        poId: m['po_id'] as int?,
+        createdAt: m['created_at'] as String,
+      );
+}

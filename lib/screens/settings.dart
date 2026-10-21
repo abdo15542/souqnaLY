@@ -62,8 +62,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         address: _ad.text.trim(),
         currency: cur));
     if (!mounted) return;
-    setState(() => _settings =
-        AppSettings(shopName: _sn.text.trim(), phone: _ph.text.trim(), address: _ad.text.trim(), currency: cur));
+    setState(() => _settings = AppSettings(
+        shopName: _sn.text.trim(),
+        phone: _ph.text.trim(),
+        address: _ad.text.trim(),
+        currency: cur));
     _msg('تم الحفظ');
   }
 
@@ -125,7 +128,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('الإعدادات')),
       body: ListView(
@@ -161,7 +166,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: Text('حفظ'))),
               ])),
           const SizedBox(height: 24),
-          const Text('التصدير', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text('التصدير',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           OutlinedButton.icon(
               onPressed: _busy ? null : () => _exp(ExportService.exportProductsCsv, 'المخزون'),
@@ -177,6 +183,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onPressed: _busy ? null : () => _exp(ExportService.exportDebtsCsv, 'الديون'),
               icon: const Icon(Icons.book),
               label: const Text('تصدير الديون CSV')),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+              onPressed: _busy ? null : () => _exp(ExportService.exportSuppliersCsv, 'الموردين'),
+              icon: const Icon(Icons.local_shipping),
+              label: const Text('تصدير الموردين CSV')),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+              onPressed: _busy ? null : () => _exp(ExportService.exportPurchaseOrdersCsv, 'أوامر الشراء'),
+              icon: const Icon(Icons.shopping_bag),
+              label: const Text('تصدير أوامر الشراء CSV')),
           const SizedBox(height: 24),
           const Text('النسخ الاحتياطي',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -189,19 +205,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
           OutlinedButton.icon(
               onPressed: _busy ? null : _restore,
               icon: const Icon(Icons.restore, color: Colors.red),
-              label: const Text('استرجاع من JSON', style: TextStyle(color: Colors.red))),
+              label: const Text('استرجاع من JSON',
+                  style: TextStyle(color: Colors.red))),
           const SizedBox(height: 24),
           Card(
               child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text('سوقنا — الإصدار 2.0',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    const Text('نظام إدارة محلات صغيرة، محلي أولاً.'),
-                    const SizedBox(height: 8),
-                    const Text('باركود · ديون · مصروفات · جرد · كاشيرين · تقارير · تدقيق · CSV · نسخ احتياطي.'),
-                  ]))),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('سوقنا — الإصدار 2.1',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        const Text('نظام إدارة محلات صغيرة، محلي أولاً.'),
+                        const SizedBox(height: 8),
+                        const Text(
+                            'باركود · ديون · مصروفات · جرد · كاشيرين · تقارير · تدقيق · CSV · نسخ احتياطي · موردون · أوامر شراء · سجل أسعار.'),
+                      ]))),
         ],
       ),
     );

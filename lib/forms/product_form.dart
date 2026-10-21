@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../db.dart';
 import '../models.dart';
 import '../screens/barcode_scanner.dart';
+import '../utils.dart';
 
 class ProductFormSheet extends StatefulWidget {
   final Product? product;
@@ -44,6 +45,34 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
     final code = await Navigator.push<String>(
         context, MaterialPageRoute(builder: (_) => const BarcodeScannerPage()));
     if (code != null && code.isNotEmpty) setState(() => _barcode.text = code);
+  }
+
+  Future<void> _showPriceHistory() async {
+    if (widget.product?.id == null) return;
+    final history = await LocalDB.getPriceHistory(widget.product!.id!);
+    if (!mounted) return;
+    await showModalBottomSheet(
+        context: context,
+        builder: (ctx) => SafeArea(
+            child: history.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: Text('لا يوجد سجل أسعار')))
+                : ListView(children: [
+                    const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text('سجل أسعار الشراء',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                    ...history.map((h) => ListTile(
+                        dense: true,
+                        title: Text('${formatMoney(h.oldPrice, '')} ← ${formatMoney(h.newPrice, '')}'),
+                        subtitle: Text(formatDateTime(h.createdAt) +
+                            (h.poId != null ? ' — أمر #$ {h.poId}' : '')),
+                        trailing: Text(h.diff > 0 ? '+${h.diff.toStringAsFixed(2)}' : h.diff.toStringAsFixed(2),
+                            style: TextStyle(
+                                color: h.diff > 0 ? Colors.red : Colors.green,
+                                fontWeight: FontWeight.bold))))
+                  ])));
   }
 
   Future<void> _save() async {
@@ -128,6 +157,13 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
                   title: const Text('نشط'),
                   value: _isActive,
                   onChanged: (v) => setState(() => _isActive = v)),
+              if (widget.product?.id != null) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                    onPressed: _showPriceHistory,
+                    icon: const Icon(Icons.timeline),
+                    label: const Text('سجل أسعار الشراء')),
+              ],
               const SizedBox(height: 16),
               FilledButton(
                   onPressed: _save,

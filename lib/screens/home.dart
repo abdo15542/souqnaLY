@@ -9,10 +9,12 @@ import 'debts.dart';
 import 'expenses.dart';
 import 'inventory.dart';
 import 'pos.dart';
+import 'purchase_orders.dart';
 import 'reports.dart';
 import 'sales_history.dart';
 import 'settings.dart';
 import 'stock_take.dart';
+import 'suppliers.dart';
 import '../utils.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -28,7 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   DebtsSummary _debts = DebtsSummary.empty();
   ExpensesSummary _expenses = ExpensesSummary.empty();
   double _net = 0;
-  int _productCount = 0, _lowStockCount = 0;
+  int _productCount = 0, _lowStockCount = 0, _supplierCount = 0;
   AppSettings _settings = AppSettings.defaults();
 
   @override
@@ -48,6 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final net = await LocalDB.getNetProfit(sod);
     final pc = await LocalDB.getProductCount();
     final ls = await LocalDB.getLowStockCount();
+    final sc = await LocalDB.getSupplierCount();
     final s = await LocalDB.getAppSettings();
     if (!mounted) return;
     setState(() {
@@ -58,6 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _net = net;
       _productCount = pc;
       _lowStockCount = ls;
+      _supplierCount = sc;
       _settings = s;
       _loading = false;
     });
@@ -82,11 +86,12 @@ class _HomeScreenState extends State<HomeScreen> {
           TextButton.icon(
               onPressed: _switch,
               icon: const Icon(Icons.person, size: 18),
-              label: Text(CashierSession.displayName, overflow: TextOverflow.ellipsis)),
+              label: Text(CashierSession.displayName,
+                  overflow: TextOverflow.ellipsis)),
           IconButton(
               onPressed: () async {
-                await Navigator.push(
-                    context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+                await Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()));
                 _load();
               },
               icon: const Icon(Icons.settings))
@@ -114,6 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         _stat('فواتير اليوم', '${_stats.count}', Icons.receipt_long),
                         _stat('إلغاءات اليوم', '${_refunds.count}', Icons.block),
                         _stat('الأصناف', '$_productCount', Icons.inventory_2),
+                        _stat('الموردون', '$_supplierCount', Icons.local_shipping),
                         _stat('ديون متبقية', formatMoney(_debts.remaining, cur), Icons.book),
                       ]),
                   const SizedBox(height: 16),
@@ -129,7 +135,24 @@ class _HomeScreenState extends State<HomeScreen> {
                               _load();
                             })),
                   const SizedBox(height: 16),
-                  const Text('الإجراءات السريعة',
+                  const Text('الشراء والمخزون',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 1.25,
+                      children: [
+                        _act('الموردون', Icons.local_shipping, const SuppliersScreen()),
+                        _act('أوامر الشراء', Icons.shopping_bag, const PurchaseOrdersScreen()),
+                        _act('المخزون', Icons.inventory_2, const InventoryScreen()),
+                        _act('الجرد', Icons.playlist_add_check, const StockTakeScreen()),
+                      ]),
+                  const SizedBox(height: 16),
+                  const Text('البيع والتحصيل',
                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
                   GridView.count(
@@ -141,12 +164,23 @@ class _HomeScreenState extends State<HomeScreen> {
                       childAspectRatio: 1.25,
                       children: [
                         _act('نقطة البيع', Icons.point_of_sale, const PosScreen()),
-                        _act('المخزون', Icons.inventory_2, const InventoryScreen()),
                         _act('الفواتير', Icons.receipt_long, const SalesHistoryScreen()),
                         _act('الديون', Icons.book, const DebtsScreen()),
-                        _act('التقارير', Icons.bar_chart, const ReportsScreen()),
                         _act('المصروفات', Icons.money_off, const ExpensesScreen()),
-                        _act('الجرد', Icons.playlist_add_check, const StockTakeScreen()),
+                      ]),
+                  const SizedBox(height: 16),
+                  const Text('الإدارة والتحليل',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 1.25,
+                      children: [
+                        _act('التقارير', Icons.bar_chart, const ReportsScreen()),
                         _act('الكاشيرين', Icons.people, const CashiersScreen()),
                         _act('سجل التدقيق', Icons.history, const AuditLogScreen()),
                         _act('الإعدادات', Icons.settings, const SettingsScreen()),
