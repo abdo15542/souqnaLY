@@ -7,6 +7,7 @@ import 'audit_log.dart';
 import 'cashier_login.dart';
 import 'cashiers.dart';
 import 'debts.dart';
+import 'employees.dart';
 import 'expenses.dart';
 import 'inventory.dart';
 import 'pos.dart';
@@ -31,11 +32,14 @@ class _HomeScreenState extends State<HomeScreen> {
   DebtsSummary _debts = DebtsSummary.empty();
   ExpensesSummary _expenses = ExpensesSummary.empty();
   double _net = 0;
+  double _payrollToday = 0;
+  double _pendingAdvances = 0;
   int _productCount = 0,
       _lowStockCount = 0,
       _supplierCount = 0,
       _staleCount = 0,
-      _overdueCount = 0;
+      _overdueCount = 0,
+      _employeeCount = 0;
   AppSettings _settings = AppSettings.defaults();
 
   @override
@@ -52,10 +56,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final rf = await LocalDB.getRefundsSummary(sod);
     final db = await LocalDB.getDebtsSummary();
     final ex = await LocalDB.getExpensesSummary(sod);
-    final net = await LocalDB.getNetProfit(sod);
+    final net = await LocalDB.getNetProfitWithPayroll(sod);
+    final pt = await LocalDB.getPayrollTotal(sod);
+    final pa = await LocalDB.getPendingAdvancesTotal();
     final pc = await LocalDB.getProductCount();
     final ls = await LocalDB.getLowStockCount();
     final sc = await LocalDB.getSupplierCount();
+    final ec = await LocalDB.getEmployeeCount();
     final stale = await LocalDB.getStaleCount(days: 30);
     final od = await LocalDB.getOverdueCount();
     final s = await LocalDB.getAppSettings();
@@ -66,9 +73,12 @@ class _HomeScreenState extends State<HomeScreen> {
       _debts = db;
       _expenses = ex;
       _net = net;
+      _payrollToday = pt;
+      _pendingAdvances = pa;
       _productCount = pc;
       _lowStockCount = ls;
       _supplierCount = sc;
+      _employeeCount = ec;
       _staleCount = stale;
       _overdueCount = od;
       _settings = s;
@@ -159,14 +169,19 @@ class _HomeScreenState extends State<HomeScreen> {
                             Icons.trending_up),
                         _stat('المصروفات', formatMoney(_expenses.total, cur),
                             Icons.money_off),
+                        _stat('الرواتب اليوم', formatMoney(_payrollToday, cur),
+                            Icons.payments),
                         _stat('صافي الربح', formatMoney(_net, cur),
                             Icons.account_balance_wallet),
+                        _stat('سلف معلقة', formatMoney(_pendingAdvances, cur),
+                            Icons.pending_actions),
                         _stat('فواتير اليوم', '${_stats.count}',
                             Icons.receipt_long),
                         _stat('إلغاءات اليوم', '${_refunds.count}', Icons.block),
                         _stat('الأصناف', '$_productCount', Icons.inventory_2),
                         _stat('الموردون', '$_supplierCount',
                             Icons.local_shipping),
+                        _stat('الموظفون', '$_employeeCount', Icons.badge),
                         _stat('ديون متبقية',
                             formatMoney(_debts.remaining, cur), Icons.book),
                       ]),
@@ -229,6 +244,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       childAspectRatio: 1.25,
                       children: [
                         _act('التقارير', Icons.bar_chart, const ReportsScreen()),
+                        _act('الموظفون والرواتب', Icons.badge,
+                            const EmployeesScreen()),
                         _act('الكاشيرين', Icons.people, const CashiersScreen()),
                         _act('سجل التدقيق', Icons.history,
                             const AuditLogScreen()),

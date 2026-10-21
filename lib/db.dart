@@ -6,7 +6,7 @@ import 'models.dart';
 
 class LocalDB {
   static Database? _database;
-  static const int _version = 8;
+  static const int _version = 9;
 
   static Future<Database> get db async => _database ??= await _open();
 
@@ -52,6 +52,12 @@ class LocalDB {
         'CREATE TABLE purchase_order_items(id INTEGER PRIMARY KEY AUTOINCREMENT,po_id INTEGER NOT NULL,product_id INTEGER,name TEXT NOT NULL,qty REAL NOT NULL,cost_price REAL NOT NULL DEFAULT 0,received_qty REAL NOT NULL DEFAULT 0,FOREIGN KEY(po_id) REFERENCES purchase_orders(id) ON DELETE CASCADE)');
     await d.execute(
         'CREATE TABLE price_history(id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER,product_name TEXT NOT NULL DEFAULT \'\',old_price REAL NOT NULL DEFAULT 0,new_price REAL NOT NULL DEFAULT 0,po_id INTEGER,created_at TEXT NOT NULL)');
+    await d.execute(
+        'CREATE TABLE employees(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,phone TEXT NOT NULL DEFAULT \'\',role TEXT NOT NULL DEFAULT \'\',base_salary REAL NOT NULL DEFAULT 0,hired_at TEXT NOT NULL DEFAULT \'\',is_active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT \'\',updated_at TEXT NOT NULL DEFAULT \'\')');
+    await d.execute(
+        'CREATE TABLE payroll_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,employee_id INTEGER NOT NULL,employee_name TEXT NOT NULL DEFAULT \'\',amount REAL NOT NULL DEFAULT 0,period TEXT NOT NULL DEFAULT \'\',note TEXT NOT NULL DEFAULT \'\',cashier_id INTEGER,created_at TEXT NOT NULL,FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE)');
+    await d.execute(
+        'CREATE TABLE advances(id INTEGER PRIMARY KEY AUTOINCREMENT,employee_id INTEGER NOT NULL,employee_name TEXT NOT NULL DEFAULT \'\',amount REAL NOT NULL DEFAULT 0,reason TEXT NOT NULL DEFAULT \'\',status TEXT NOT NULL DEFAULT \'pending\',created_at TEXT NOT NULL,settled_at TEXT,FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE)');
     final idx = [
       'idx_products_active ON products(is_active)',
       'idx_products_barcode ON products(barcode)',
@@ -71,6 +77,11 @@ class LocalDB {
       'idx_po_created ON purchase_orders(created_at)',
       'idx_po_items_po ON purchase_order_items(po_id)',
       'idx_price_history_product ON price_history(product_id)',
+      'idx_employees_active ON employees(is_active)',
+      'idx_payroll_employee ON payroll_entries(employee_id)',
+      'idx_payroll_period ON payroll_entries(period)',
+      'idx_advances_employee ON advances(employee_id)',
+      'idx_advances_status ON advances(status)',
     ];
     for (final i in idx) {
       await d.execute('CREATE INDEX IF NOT EXISTS $i');
@@ -155,6 +166,24 @@ class LocalDB {
           'CREATE INDEX IF NOT EXISTS idx_products_last_sold ON products(last_sold_at)');
       await d.execute(
           'CREATE INDEX IF NOT EXISTS idx_debts_due ON debts(due_date)');
+    }
+    if (old < 9) {
+      await d.execute(
+          'CREATE TABLE IF NOT EXISTS employees(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,phone TEXT NOT NULL DEFAULT \'\',role TEXT NOT NULL DEFAULT \'\',base_salary REAL NOT NULL DEFAULT 0,hired_at TEXT NOT NULL DEFAULT \'\',is_active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT \'\',updated_at TEXT NOT NULL DEFAULT \'\')');
+      await d.execute(
+          'CREATE TABLE IF NOT EXISTS payroll_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,employee_id INTEGER NOT NULL,employee_name TEXT NOT NULL DEFAULT \'\',amount REAL NOT NULL DEFAULT 0,period TEXT NOT NULL DEFAULT \'\',note TEXT NOT NULL DEFAULT \'\',cashier_id INTEGER,created_at TEXT NOT NULL,FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE)');
+      await d.execute(
+          'CREATE TABLE IF NOT EXISTS advances(id INTEGER PRIMARY KEY AUTOINCREMENT,employee_id INTEGER NOT NULL,employee_name TEXT NOT NULL DEFAULT \'\',amount REAL NOT NULL DEFAULT 0,reason TEXT NOT NULL DEFAULT \'\',status TEXT NOT NULL DEFAULT \'pending\',created_at TEXT NOT NULL,settled_at TEXT,FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE)');
+      final idx = [
+        'idx_employees_active ON employees(is_active)',
+        'idx_payroll_employee ON payroll_entries(employee_id)',
+        'idx_payroll_period ON payroll_entries(period)',
+        'idx_advances_employee ON advances(employee_id)',
+        'idx_advances_status ON advances(status)',
+      ];
+      for (final i in idx) {
+        await d.execute('CREATE INDEX IF NOT EXISTS $i');
+      }
     }
   }
 
@@ -620,6 +649,173 @@ class LocalDB {
     final s = await getSalesStats(since);
     final e = await getExpensesSummary(since);
     return s.profit - e.total;
+  }
+
+  // ================= Employees / Payroll / Advances =================
+  static Future<List<Employee>> getEmployees({String search = ''}) async {
+    final d = await db;
+    final s = search.trim();
+    String w = 'is_active = 1';
+    final ar = <Object?>[];
+    if (s.isNotEmpty) {
+      w += ' AND (name LIKE ? OR role LIKE ? OR phone LIKE ?)';
+      ar.addAll(['%$s%', '%$s%', '%$s%']);
+    }
+    final rows = await d.query('employees',
+        where: w, whereArgs: ar, orderBy: 'name COLLATE NOCASE');
+    return rows.map(Employee.fromMap).toList();
+  }
+
+  static Future<List<Employee>> getAllEmployees() async {
+    final d = await db;
+    final rows = await d.query('employees', orderBy: 'name COLLATE NOCASE');
+    return rows.map(Employee.fromMap).toList();
+  }
+
+  static Future<int> getEmployeeCount() async {
+    final d = await db;
+    final r = await d
+        .rawQuery('SELECT COUNT(*) c FROM employees WHERE is_active = 1');
+    return r.first['c'] as int;
+  }
+
+  static Future<int> saveEmployee(Employee emp) async {
+    final d = await db;
+    final m = emp.toMap();
+    if (emp.id == null) {
+      final id = await d.insert('employees', m);
+      await logAudit(
+          action: 'employee_added',
+          entity: 'employee',
+          entityId: id,
+          details: emp.name);
+      return id;
+    } else {
+      await d.update('employees', m, where: 'id = ?', whereArgs: [emp.id]);
+      await logAudit(
+          action: 'employee_updated',
+          entity: 'employee',
+          entityId: emp.id,
+          details: emp.name);
+      return emp.id!;
+    }
+  }
+
+  static Future<void> deleteEmployee(int id) async {
+    final d = await db;
+    final r = await d
+        .query('employees', where: 'id = ?', whereArgs: [id], limit: 1);
+    final n = r.isEmpty ? '' : r.first['name'] as String;
+    await d.delete('employees', where: 'id = ?', whereArgs: [id]);
+    await logAudit(
+        action: 'employee_deleted',
+        entity: 'employee',
+        entityId: id,
+        details: n);
+  }
+
+  static Future<void> addPayrollEntry(PayrollEntry e) async {
+    final d = await db;
+    final id = await d.insert('payroll_entries', e.toMap());
+    await logAudit(
+        action: 'payroll_paid',
+        entity: 'payroll',
+        entityId: id,
+        details: '${e.employeeName}: ${e.amount} (${e.period})');
+  }
+
+  static Future<List<PayrollEntry>> getPayrollEntries(
+      {int? employeeId, String period = ''}) async {
+    final d = await db;
+    final cl = <String>[];
+    final ar = <Object?>[];
+    if (employeeId != null) {
+      cl.add('employee_id = ?');
+      ar.add(employeeId);
+    }
+    if (period.isNotEmpty) {
+      cl.add('period = ?');
+      ar.add(period);
+    }
+    final w = cl.isEmpty ? null : cl.join(' AND ');
+    final rows = await d.query('payroll_entries',
+        where: w, whereArgs: ar, orderBy: 'id DESC');
+    return rows.map(PayrollEntry.fromMap).toList();
+  }
+
+  static Future<double> getPayrollTotal(DateTime since) async {
+    final d = await db;
+    final r = await d.rawQuery(
+        'SELECT COALESCE(SUM(amount),0) t FROM payroll_entries WHERE created_at >= ?',
+        [since.toIso8601String()]);
+    return (r.first['t'] as num).toDouble();
+  }
+
+  static Future<void> addAdvance(Advance a) async {
+    final d = await db;
+    final id = await d.insert('advances', a.toMap());
+    await logAudit(
+        action: 'advance_given',
+        entity: 'advance',
+        entityId: id,
+        details: '${a.employeeName}: ${a.amount}');
+  }
+
+  static Future<List<Advance>> getAdvances(
+      {int? employeeId, String status = ''}) async {
+    final d = await db;
+    final cl = <String>[];
+    final ar = <Object?>[];
+    if (employeeId != null) {
+      cl.add('employee_id = ?');
+      ar.add(employeeId);
+    }
+    if (status.isNotEmpty) {
+      cl.add('status = ?');
+      ar.add(status);
+    }
+    final w = cl.isEmpty ? null : cl.join(' AND ');
+    final rows = await d.query('advances',
+        where: w, whereArgs: ar, orderBy: 'id DESC');
+    return rows.map(Advance.fromMap).toList();
+  }
+
+  static Future<bool> settleAdvance(int id) async {
+    final d = await db;
+    final now = DateTime.now().toIso8601String();
+    final ok = await d.transaction((txn) async {
+      final r = await txn.query('advances',
+          where: 'id = ?', whereArgs: [id], limit: 1);
+      if (r.isEmpty) return false;
+      if (r.first['status'] == 'settled') return false;
+      await txn.update('advances',
+          {'status': 'settled', 'settled_at': now},
+          where: 'id = ?', whereArgs: [id]);
+      return true;
+    });
+    if (ok) {
+      await logAudit(
+          action: 'advance_settled',
+          entity: 'advance',
+          entityId: id,
+          details: 'تسوية سلفة #$id');
+    }
+    return ok;
+  }
+
+  static Future<double> getPendingAdvancesTotal() async {
+    final d = await db;
+    final r = await d.rawQuery(
+        'SELECT COALESCE(SUM(amount),0) t FROM advances WHERE status = \'pending\'');
+    return (r.first['t'] as num).toDouble();
+  }
+
+  // صافي الربح بعد خصم الرواتب المدفوعة (السلف لا تُخصم: هي تسبيق من الراتب)
+  static Future<double> getNetProfitWithPayroll(DateTime since) async {
+    final s = await getSalesStats(since);
+    final e = await getExpensesSummary(since);
+    final p = await getPayrollTotal(since);
+    return s.profit - e.total - p;
   }
 
   // ================= Cashiers =================
@@ -1093,12 +1289,15 @@ class LocalDB {
     'settings',
     'cashiers',
     'suppliers',
+    'employees',
     'products',
     'sales',
     'sale_items',
     'purchase_orders',
     'purchase_order_items',
     'price_history',
+    'payroll_entries',
+    'advances',
     'debts',
     'debt_payments',
     'stock_takes',
@@ -1132,6 +1331,8 @@ class LocalDB {
         'stock_take_items',
         'purchase_order_items',
         'price_history',
+        'payroll_entries',
+        'advances',
         'sales',
         'stock_takes',
         'purchase_orders',
@@ -1140,6 +1341,7 @@ class LocalDB {
         'debts',
         'products',
         'suppliers',
+        'employees',
         'cashiers',
         'settings'
       ]) {

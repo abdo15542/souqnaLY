@@ -47,7 +47,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final st = await LocalDB.getAppSettings();
     final sa = await LocalDB.getSalesStats(s);
     final ex = await LocalDB.getExpensesSummary(s);
-    final net = await LocalDB.getNetProfit(s);
+    final net = await LocalDB.getNetProfitWithPayroll(s);
     final tp = await LocalDB.getTopProducts(s, 5);
     final dl = await LocalDB.getDailySales(s);
     final ch = await LocalDB.getDailySales(cs);

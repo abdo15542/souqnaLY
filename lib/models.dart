@@ -593,3 +593,141 @@ class AppSettings {
   factory AppSettings.defaults() => const AppSettings(
       shopName: 'سوقنا', phone: '', address: '', currency: 'د.ل');
 }
+
+class Employee {
+  final int? id;
+  final String name;
+  final String phone;
+  final String role;
+  final double baseSalary;
+  final String hiredAt;
+  final bool isActive;
+  final String createdAt;
+  final String updatedAt;
+
+  Employee({
+    this.id,
+    required this.name,
+    this.phone = '',
+    this.role = '',
+    required this.baseSalary,
+    this.hiredAt = '',
+    this.isActive = true,
+    this.createdAt = '',
+    this.updatedAt = '',
+  });
+
+  Map<String, dynamic> toMap() {
+    final now = DateTime.now().toIso8601String();
+    return {
+      'name': name,
+      'phone': phone,
+      'role': role,
+      'base_salary': baseSalary,
+      'hired_at': hiredAt,
+      'is_active': isActive ? 1 : 0,
+      'created_at': createdAt.isEmpty ? now : createdAt,
+      'updated_at': now,
+    };
+  }
+
+  factory Employee.fromMap(Map<String, dynamic> m) => Employee(
+        id: m['id'] as int?,
+        name: m['name'] as String,
+        phone: (m['phone'] as String?) ?? '',
+        role: (m['role'] as String?) ?? '',
+        baseSalary: (m['base_salary'] as num?)?.toDouble() ?? 0,
+        hiredAt: (m['hired_at'] as String?) ?? '',
+        isActive: ((m['is_active'] as int?) ?? 1) == 1,
+        createdAt: (m['created_at'] as String?) ?? '',
+        updatedAt: (m['updated_at'] as String?) ?? '',
+      );
+}
+
+class PayrollEntry {
+  final int? id;
+  final int employeeId;
+  final String employeeName;
+  final double amount;
+  final String period;
+  final String note;
+  final int? cashierId;
+  final String createdAt;
+
+  PayrollEntry({
+    this.id,
+    required this.employeeId,
+    required this.employeeName,
+    required this.amount,
+    required this.period,
+    this.note = '',
+    this.cashierId,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'employee_id': employeeId,
+        'employee_name': employeeName,
+        'amount': amount,
+        'period': period,
+        'note': note,
+        'cashier_id': cashierId,
+        'created_at': createdAt,
+      };
+
+  factory PayrollEntry.fromMap(Map<String, dynamic> m) => PayrollEntry(
+        id: m['id'] as int?,
+        employeeId: m['employee_id'] as int,
+        employeeName: (m['employee_name'] as String?) ?? '',
+        amount: (m['amount'] as num).toDouble(),
+        period: (m['period'] as String?) ?? '',
+        note: (m['note'] as String?) ?? '',
+        cashierId: m['cashier_id'] as int?,
+        createdAt: m['created_at'] as String,
+      );
+}
+
+class Advance {
+  final int? id;
+  final int employeeId;
+  final String employeeName;
+  final double amount;
+  final String reason;
+  final String status;
+  final String createdAt;
+  final String? settledAt;
+
+  Advance({
+    this.id,
+    required this.employeeId,
+    required this.employeeName,
+    required this.amount,
+    this.reason = '',
+    this.status = 'pending',
+    required this.createdAt,
+    this.settledAt,
+  });
+
+  bool get isPending => status == 'pending';
+
+  Map<String, dynamic> toMap() => {
+        'employee_id': employeeId,
+        'employee_name': employeeName,
+        'amount': amount,
+        'reason': reason,
+        'status': status,
+        'created_at': createdAt,
+        'settled_at': settledAt,
+      };
+
+  factory Advance.fromMap(Map<String, dynamic> m) => Advance(
+        id: m['id'] as int?,
+        employeeId: m['employee_id'] as int,
+        employeeName: (m['employee_name'] as String?) ?? '',
+        amount: (m['amount'] as num).toDouble(),
+        reason: (m['reason'] as String?) ?? '',
+        status: (m['status'] as String?) ?? 'pending',
+        createdAt: m['created_at'] as String,
+        settledAt: m['settled_at'] as String?,
+      );
+}
