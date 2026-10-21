@@ -67,7 +67,7 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
                         dense: true,
                         title: Text('${formatMoney(h.oldPrice, '')} ← ${formatMoney(h.newPrice, '')}'),
                         subtitle: Text(formatDateTime(h.createdAt) +
-                            (h.poId != null ? ' — أمر #$ {h.poId}' : '')),
+                            (h.poId != null ? ' — أمر #${h.poId}' : '')),
                         trailing: Text(h.diff > 0 ? '+${h.diff.toStringAsFixed(2)}' : h.diff.toStringAsFixed(2),
                             style: TextStyle(
                                 color: h.diff > 0 ? Colors.red : Colors.green,

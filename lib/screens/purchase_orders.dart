@@ -258,7 +258,7 @@ class _NewPOSheetState extends State<_NewPOSheet> {
                           TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 16),
                   if (_suppliers.isEmpty)
-                    const Card(
+                    Card(
                         color: Colors.orange.shade50,
                         child: Padding(
                             padding: EdgeInsets.all(12),
