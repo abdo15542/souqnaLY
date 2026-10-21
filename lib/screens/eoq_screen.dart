@@ -133,8 +133,8 @@ class _EoqScreenState extends State<EoqScreen> {
     );
     if (ok == true && chosen != null) {
       await LocalDB.createPurchaseOrder(
-        supplierId: chosen.id,
-        supplierName: chosen.name,
+        supplierId: chosen!.id,
+        supplierName: chosen!.name,
         lines: [POLine(product: it.product, qty: qty, cost: it.product.buyPrice)],
         note: 'توصية EOQ محلية: دورة ${it.eoq.toStringAsFixed(0)} • ROP ${it.reorderPoint.toStringAsFixed(0)}',
         cashierId: CashierSession.cashierId,
