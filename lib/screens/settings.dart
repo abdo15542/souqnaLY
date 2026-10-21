@@ -3,6 +3,7 @@ import '../db.dart';
 import '../models.dart';
 import '../services/backup_service.dart';
 import '../services/export_service.dart';
+import '../theme_state.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -18,6 +19,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _ad = TextEditingController();
   final _cu = TextEditingController();
   AppSettings _settings = AppSettings.defaults();
+  String _theme = 'system';
+  bool _lockOn = false;
 
   @override
   void initState() {
@@ -37,6 +40,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final s = await LocalDB.getAppSettings();
+    final tm = await LocalDB.getThemeMode();
+    final lo = await LocalDB.isLockEnabled();
     if (!mounted) return;
     setState(() {
       _settings = s;
@@ -44,6 +49,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _ph.text = s.phone;
       _ad.text = s.address;
       _cu.text = s.currency;
+      _theme = tm;
+      _lockOn = lo;
       _loading = false;
     });
   }
@@ -68,6 +75,139 @@ class _SettingsScreenState extends State<SettingsScreen> {
         address: _ad.text.trim(),
         currency: cur));
     _msg('تم الحفظ');
+  }
+
+  Future<void> _setTheme(String mode) async {
+    await LocalDB.saveThemeMode(mode);
+    appTheme.value = mode == 'light'
+        ? ThemeMode.light
+        : mode == 'dark'
+            ? ThemeMode.dark
+            : ThemeMode.system;
+    setState(() => _theme = mode);
+  }
+
+  Future<void> _toggleLock(bool v) async {
+    if (v) {
+      final has = await LocalDB.hasLockPin();
+      if (!has) {
+        final ok = await _setLockPinDialog();
+        if (ok != true) return;
+      }
+      await LocalDB.setLockEnabled(true);
+      setState(() => _lockOn = true);
+      _msg('تم تفعيل قفل التطبيق');
+    } else {
+      await LocalDB.setLockEnabled(false);
+      setState(() => _lockOn = false);
+      _msg('تم تعطيل القفل');
+    }
+  }
+
+  Future<bool?> _setLockPinDialog() async {
+    final p1 = TextEditingController();
+    final p2 = TextEditingController();
+    final fk = GlobalKey<FormState>();
+    String captured = '';
+    final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+              title: const Text('تعيين رمز القفل'),
+              content: Form(
+                  key: fk,
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    TextFormField(
+                        controller: p1,
+                        obscureText: true,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'الرمز (4+)', border: OutlineInputBorder()),
+                        validator: (v) {
+                          if (v == null || v.trim().length < 4) return '4 أرقام على الأقل';
+                          return null;
+                        }),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                        controller: p2,
+                        obscureText: true,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'تأكيد الرمز', border: OutlineInputBorder()),
+                        validator: (v) {
+                          if (v != p1.text) return 'غير مطابق';
+                          return null;
+                        }),
+                  ])),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('إلغاء')),
+                FilledButton(
+                    onPressed: () {
+                      if (fk.currentState!.validate()) {
+                        captured = p1.text.trim();
+                        Navigator.pop(ctx, true);
+                      }
+                    },
+                    child: const Text('حفظ')),
+              ],
+            ));
+    p1.dispose();
+    p2.dispose();
+    if (ok == true && captured.isNotEmpty) {
+      await LocalDB.setLockPin(captured);
+      return true;
+    }
+    return ok;
+  }
+
+  Future<void> _changeLockPin() async {
+    final p1 = TextEditingController();
+    final p2 = TextEditingController();
+    final fk = GlobalKey<FormState>();
+    final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+              title: const Text('تغيير رمز القفل'),
+              content: Form(
+                  key: fk,
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    TextFormField(
+                        controller: p1,
+                        obscureText: true,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'الرمز الجديد (4+)', border: OutlineInputBorder()),
+                        validator: (v) {
+                          if (v == null || v.trim().length < 4) return '4 أرقام على الأقل';
+                          return null;
+                        }),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                        controller: p2,
+                        obscureText: true,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'تأكيد الرمز', border: OutlineInputBorder()),
+                        validator: (v) {
+                          if (v != p1.text) return 'غير مطابق';
+                          return null;
+                        }),
+                  ])),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('إلغاء')),
+                FilledButton(
+                    onPressed: () {
+                      if (fk.currentState!.validate()) Navigator.pop(ctx, true);
+                    },
+                    child: const Text('حفظ')),
+              ],
+            ));
+    final pin = p1.text.trim();
+    p1.dispose();
+    p2.dispose();
+    if (ok == true && pin.isNotEmpty) {
+      await LocalDB.setLockPin(pin);
+      _msg('تم تحديث الرمز');
+    }
   }
 
   Future<void> _backup() async {
@@ -166,6 +306,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: Text('حفظ'))),
               ])),
           const SizedBox(height: 24),
+          const Text('المظهر',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'light', label: Text('فاتح'), icon: Icon(Icons.light_mode)),
+                ButtonSegment(value: 'dark', label: Text('داكن'), icon: Icon(Icons.dark_mode)),
+                ButtonSegment(value: 'system', label: Text('النظام'), icon: Icon(Icons.brightness_auto)),
+              ],
+              selected: {_theme},
+              onSelectionChanged: (s) => _setTheme(s.first)),
+          const SizedBox(height: 24),
+          const Text('الأمان',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          SwitchListTile(
+              title: const Text('قفل التطبيق برمز PIN'),
+              subtitle: const Text('يطلب الرمز عند فتح التطبيق'),
+              value: _lockOn,
+              onChanged: _busy ? null : _toggleLock),
+          if (_lockOn)
+            OutlinedButton.icon(
+                onPressed: _busy ? null : _changeLockPin,
+                icon: const Icon(Icons.key),
+                label: const Text('تغيير الرمز')),
+          const SizedBox(height: 24),
           const Text('التصدير',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
@@ -214,13 +380,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('سوقنا — الإصدار 2.1',
+                        const Text('سوقنا — الإصدار 2.2',
                             style: TextStyle(fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
                         const Text('نظام إدارة محلات صغيرة، محلي أولاً.'),
                         const SizedBox(height: 8),
                         const Text(
-                            'باركود · ديون · مصروفات · جرد · كاشيرين · تقارير · تدقيق · CSV · نسخ احتياطي · موردون · أوامر شراء · سجل أسعار.'),
+                            'باركود · ديون · مصروفات · جرد · كاشيرين · تقارير · تدقيق · CSV · نسخ احتياطي · موردون · أوامر شراء · سجل أسعار · وضع ليلي · قفل PIN · تنبيهات ذكية · مقارنة فترات.'),
                       ]))),
         ],
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../cashier_session.dart';
 import '../db.dart';
 import '../models.dart';
+import 'alerts.dart';
 import 'audit_log.dart';
 import 'cashier_login.dart';
 import 'cashiers.dart';
@@ -30,7 +31,11 @@ class _HomeScreenState extends State<HomeScreen> {
   DebtsSummary _debts = DebtsSummary.empty();
   ExpensesSummary _expenses = ExpensesSummary.empty();
   double _net = 0;
-  int _productCount = 0, _lowStockCount = 0, _supplierCount = 0;
+  int _productCount = 0,
+      _lowStockCount = 0,
+      _supplierCount = 0,
+      _staleCount = 0,
+      _overdueCount = 0;
   AppSettings _settings = AppSettings.defaults();
 
   @override
@@ -51,6 +56,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final pc = await LocalDB.getProductCount();
     final ls = await LocalDB.getLowStockCount();
     final sc = await LocalDB.getSupplierCount();
+    final stale = await LocalDB.getStaleCount(days: 30);
+    final od = await LocalDB.getOverdueCount();
     final s = await LocalDB.getAppSettings();
     if (!mounted) return;
     setState(() {
@@ -62,6 +69,8 @@ class _HomeScreenState extends State<HomeScreen> {
       _productCount = pc;
       _lowStockCount = ls;
       _supplierCount = sc;
+      _staleCount = stale;
+      _overdueCount = od;
       _settings = s;
       _loading = false;
     });
@@ -76,6 +85,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  int get _alertTotal => _lowStockCount + _staleCount + _overdueCount;
+
   @override
   Widget build(BuildContext context) {
     final cur = _settings.currency;
@@ -83,6 +94,17 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text(_settings.shopName),
         actions: [
+          IconButton(
+              onPressed: () async {
+                await Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const AlertsScreen()));
+                _load();
+              },
+              icon: Badge(
+                  isLabelVisible: _alertTotal > 0,
+                  label: Text('$_alertTotal'),
+                  child: const Icon(Icons.notifications)),
+              tooltip: 'التنبيهات'),
           TextButton.icon(
               onPressed: _switch,
               icon: const Icon(Icons.person, size: 18),
@@ -104,6 +126,25 @@ class _HomeScreenState extends State<HomeScreen> {
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  if (_alertTotal > 0)
+                    Card(
+                      color: Colors.amber.shade50,
+                      child: ListTile(
+                        leading: const Icon(Icons.warning_amber,
+                            color: Colors.orange),
+                        title: const Text('تنبيهات تحتاج انتباهك'),
+                        subtitle: Text(
+                            'منخفض: $_lowStockCount • راكدة: $_staleCount • متأخر: $_overdueCount'),
+                        trailing: const Icon(Icons.chevron_left),
+                        onTap: () async {
+                          await Navigator.push(context,
+                              MaterialPageRoute(
+                                  builder: (_) => const AlertsScreen()));
+                          _load();
+                        },
+                      ),
+                    ),
+                  const SizedBox(height: 12),
                   GridView.count(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -112,31 +153,27 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisSpacing: 12,
                       childAspectRatio: 1.35,
                       children: [
-                        _stat('مبيعات اليوم', formatMoney(_stats.revenue, cur), Icons.attach_money),
-                        _stat('ربح المبيعات', formatMoney(_stats.profit, cur), Icons.trending_up),
-                        _stat('المصروفات', formatMoney(_expenses.total, cur), Icons.money_off),
-                        _stat('صافي الربح', formatMoney(_net, cur), Icons.account_balance_wallet),
-                        _stat('فواتير اليوم', '${_stats.count}', Icons.receipt_long),
+                        _stat('مبيعات اليوم', formatMoney(_stats.revenue, cur),
+                            Icons.attach_money),
+                        _stat('ربح المبيعات', formatMoney(_stats.profit, cur),
+                            Icons.trending_up),
+                        _stat('المصروفات', formatMoney(_expenses.total, cur),
+                            Icons.money_off),
+                        _stat('صافي الربح', formatMoney(_net, cur),
+                            Icons.account_balance_wallet),
+                        _stat('فواتير اليوم', '${_stats.count}',
+                            Icons.receipt_long),
                         _stat('إلغاءات اليوم', '${_refunds.count}', Icons.block),
                         _stat('الأصناف', '$_productCount', Icons.inventory_2),
-                        _stat('الموردون', '$_supplierCount', Icons.local_shipping),
-                        _stat('ديون متبقية', formatMoney(_debts.remaining, cur), Icons.book),
+                        _stat('الموردون', '$_supplierCount',
+                            Icons.local_shipping),
+                        _stat('ديون متبقية',
+                            formatMoney(_debts.remaining, cur), Icons.book),
                       ]),
                   const SizedBox(height: 16),
-                  if (_lowStockCount > 0)
-                    Card(
-                        color: Colors.orange.shade50,
-                        child: ListTile(
-                            leading: const Icon(Icons.warning_amber, color: Colors.orange),
-                            title: Text('تنبيه: $_lowStockCount صنف وصل للحد الأدنى'),
-                            onTap: () async {
-                              await Navigator.push(context,
-                                  MaterialPageRoute(builder: (_) => const InventoryScreen()));
-                              _load();
-                            })),
-                  const SizedBox(height: 16),
                   const Text('الشراء والمخزون',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
                   GridView.count(
                       shrinkWrap: true,
@@ -146,14 +183,21 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisSpacing: 12,
                       childAspectRatio: 1.25,
                       children: [
-                        _act('الموردون', Icons.local_shipping, const SuppliersScreen()),
-                        _act('أوامر الشراء', Icons.shopping_bag, const PurchaseOrdersScreen()),
-                        _act('المخزون', Icons.inventory_2, const InventoryScreen()),
-                        _act('الجرد', Icons.playlist_add_check, const StockTakeScreen()),
+                        _act('الموردون', Icons.local_shipping,
+                            const SuppliersScreen()),
+                        _act('أوامر الشراء', Icons.shopping_bag,
+                            const PurchaseOrdersScreen()),
+                        _act('المخزون', Icons.inventory_2,
+                            const InventoryScreen()),
+                        _act('الجرد', Icons.playlist_add_check,
+                            const StockTakeScreen()),
+                        _act('التنبيهات', Icons.notifications,
+                            const AlertsScreen()),
                       ]),
                   const SizedBox(height: 16),
                   const Text('البيع والتحصيل',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
                   GridView.count(
                       shrinkWrap: true,
@@ -163,14 +207,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisSpacing: 12,
                       childAspectRatio: 1.25,
                       children: [
-                        _act('نقطة البيع', Icons.point_of_sale, const PosScreen()),
-                        _act('الفواتير', Icons.receipt_long, const SalesHistoryScreen()),
+                        _act('نقطة البيع', Icons.point_of_sale,
+                            const PosScreen()),
+                        _act('الفواتير', Icons.receipt_long,
+                            const SalesHistoryScreen()),
                         _act('الديون', Icons.book, const DebtsScreen()),
-                        _act('المصروفات', Icons.money_off, const ExpensesScreen()),
+                        _act('المصروفات', Icons.money_off,
+                            const ExpensesScreen()),
                       ]),
                   const SizedBox(height: 16),
                   const Text('الإدارة والتحليل',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
                   GridView.count(
                       shrinkWrap: true,
@@ -182,8 +230,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         _act('التقارير', Icons.bar_chart, const ReportsScreen()),
                         _act('الكاشيرين', Icons.people, const CashiersScreen()),
-                        _act('سجل التدقيق', Icons.history, const AuditLogScreen()),
-                        _act('الإعدادات', Icons.settings, const SettingsScreen()),
+                        _act('سجل التدقيق', Icons.history,
+                            const AuditLogScreen()),
+                        _act('الإعدادات', Icons.settings,
+                            const SettingsScreen()),
                       ]),
                 ],
               ),
@@ -197,7 +247,9 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Icon(i, size: 26),
             const SizedBox(height: 6),
-            Text(t, style: Theme.of(context).textTheme.bodySmall, textAlign: TextAlign.center),
+            Text(t,
+                style: Theme.of(context).textTheme.bodySmall,
+                textAlign: TextAlign.center),
             const SizedBox(height: 4),
             Text(v,
                 style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
@@ -212,9 +264,13 @@ class _HomeScreenState extends State<HomeScreen> {
           },
           child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Icon(i, size: 34),
-                const SizedBox(height: 10),
-                Text(t, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-              ]))));
+              child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(i, size: 34),
+                    const SizedBox(height: 10),
+                    Text(t,
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600)),
+                  ]))));
 }

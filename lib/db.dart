@@ -6,7 +6,7 @@ import 'models.dart';
 
 class LocalDB {
   static Database? _database;
-  static const int _version = 7;
+  static const int _version = 8;
 
   static Future<Database> get db async => _database ??= await _open();
 
@@ -23,13 +23,13 @@ class LocalDB {
 
   static Future<void> _onCreate(Database d, int v) async {
     await d.execute(
-        'CREATE TABLE products(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,category TEXT NOT NULL DEFAULT \'\',unit TEXT NOT NULL DEFAULT \'حبة\',barcode TEXT NOT NULL DEFAULT \'\',buy_price REAL NOT NULL DEFAULT 0,sell_price REAL NOT NULL DEFAULT 0,qty REAL NOT NULL DEFAULT 0,min_qty REAL NOT NULL DEFAULT 0,is_active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT \'\',updated_at TEXT NOT NULL DEFAULT \'\')');
+        'CREATE TABLE products(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,category TEXT NOT NULL DEFAULT \'\',unit TEXT NOT NULL DEFAULT \'حبة\',barcode TEXT NOT NULL DEFAULT \'\',buy_price REAL NOT NULL DEFAULT 0,sell_price REAL NOT NULL DEFAULT 0,qty REAL NOT NULL DEFAULT 0,min_qty REAL NOT NULL DEFAULT 0,is_active INTEGER NOT NULL DEFAULT 1,last_sold_at TEXT NOT NULL DEFAULT \'\',created_at TEXT NOT NULL DEFAULT \'\',updated_at TEXT NOT NULL DEFAULT \'\')');
     await d.execute(
         'CREATE TABLE sales(id INTEGER PRIMARY KEY AUTOINCREMENT,total REAL NOT NULL,cost REAL NOT NULL DEFAULT 0,cashier_id INTEGER,created_at TEXT NOT NULL,refunded_at TEXT,refunded_by INTEGER,refund_note TEXT NOT NULL DEFAULT \'\')');
     await d.execute(
         'CREATE TABLE sale_items(id INTEGER PRIMARY KEY AUTOINCREMENT,sale_id INTEGER NOT NULL,product_id INTEGER,name TEXT NOT NULL,price REAL NOT NULL,cost_price REAL NOT NULL DEFAULT 0,qty REAL NOT NULL,FOREIGN KEY(sale_id) REFERENCES sales(id) ON DELETE CASCADE)');
     await d.execute(
-        'CREATE TABLE debts(id INTEGER PRIMARY KEY AUTOINCREMENT,customer TEXT NOT NULL,phone TEXT NOT NULL DEFAULT \'\',amount REAL NOT NULL,paid REAL NOT NULL DEFAULT 0,note TEXT NOT NULL DEFAULT \'\',created_at TEXT NOT NULL)');
+        'CREATE TABLE debts(id INTEGER PRIMARY KEY AUTOINCREMENT,customer TEXT NOT NULL,phone TEXT NOT NULL DEFAULT \'\',amount REAL NOT NULL,paid REAL NOT NULL DEFAULT 0,note TEXT NOT NULL DEFAULT \'\',due_date TEXT NOT NULL DEFAULT \'\',created_at TEXT NOT NULL)');
     await d.execute(
         'CREATE TABLE debt_payments(id INTEGER PRIMARY KEY AUTOINCREMENT,debt_id INTEGER NOT NULL,amount REAL NOT NULL,created_at TEXT NOT NULL,FOREIGN KEY(debt_id) REFERENCES debts(id) ON DELETE CASCADE)');
     await d.execute(
@@ -55,10 +55,12 @@ class LocalDB {
     final idx = [
       'idx_products_active ON products(is_active)',
       'idx_products_barcode ON products(barcode)',
+      'idx_products_last_sold ON products(last_sold_at)',
       'idx_sales_created ON sales(created_at)',
       'idx_sales_refunded ON sales(refunded_at)',
       'idx_sale_items_sale ON sale_items(sale_id)',
       'idx_debts_customer ON debts(customer)',
+      'idx_debts_due ON debts(due_date)',
       'idx_debt_payments_debt ON debt_payments(debt_id)',
       'idx_expenses_created ON expenses(created_at)',
       'idx_audit_created ON audit_log(created_at)',
@@ -146,6 +148,14 @@ class LocalDB {
         await d.execute('CREATE INDEX IF NOT EXISTS $i');
       }
     }
+    if (old < 8) {
+      await _addColumn(d, 'products', 'last_sold_at', "TEXT NOT NULL DEFAULT ''");
+      await _addColumn(d, 'debts', 'due_date', "TEXT NOT NULL DEFAULT ''");
+      await d.execute(
+          'CREATE INDEX IF NOT EXISTS idx_products_last_sold ON products(last_sold_at)');
+      await d.execute(
+          'CREATE INDEX IF NOT EXISTS idx_debts_due ON debts(due_date)');
+    }
   }
 
   static Future<void> _addColumn(
@@ -156,6 +166,67 @@ class LocalDB {
     }
   }
 
+  // ================= Theme =================
+  static Future<String> getThemeMode() async {
+    final d = await db;
+    final r = await d.query('settings',
+        where: 'key = ?', whereArgs: ['theme_mode'], limit: 1);
+    return r.isEmpty ? 'system' : r.first['value'] as String;
+  }
+
+  static Future<void> saveThemeMode(String mode) async {
+    final d = await db;
+    await d.insert('settings', {'key': 'theme_mode', 'value': mode},
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  // ================= App Lock =================
+  static Future<bool> isLockEnabled() async {
+    final d = await db;
+    final r = await d.query('settings',
+        where: 'key = ?', whereArgs: ['lock_enabled'], limit: 1);
+    return r.isNotEmpty && r.first['value'] == '1';
+  }
+
+  static Future<void> setLockEnabled(bool v) async {
+    final d = await db;
+    await d.insert('settings',
+        {'key': 'lock_enabled', 'value': v ? '1' : '0'},
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<bool> hasLockPin() async {
+    final d = await db;
+    final r = await d.query('settings',
+        where: 'key = ?', whereArgs: ['lock_pin_hash'], limit: 1);
+    return r.isNotEmpty && (r.first['value'] as String).isNotEmpty;
+  }
+
+  static Future<void> setLockPin(String pin) async {
+    final d = await db;
+    final salt = CashierSession.generateSalt();
+    final b = d.batch();
+    b.insert('settings', {'key': 'lock_pin_salt', 'value': salt},
+        conflictAlgorithm: ConflictAlgorithm.replace);
+    b.insert('settings',
+        {'key': 'lock_pin_hash', 'value': CashierSession.hashPin(pin, salt)},
+        conflictAlgorithm: ConflictAlgorithm.replace);
+    await b.commit(noResult: true);
+  }
+
+  static Future<bool> verifyLockPin(String pin) async {
+    final d = await db;
+    final hr = await d.query('settings',
+        where: 'key = ?', whereArgs: ['lock_pin_hash'], limit: 1);
+    final sr = await d.query('settings',
+        where: 'key = ?', whereArgs: ['lock_pin_salt'], limit: 1);
+    if (hr.isEmpty || sr.isEmpty) return false;
+    final hash = hr.first['value'] as String;
+    final salt = sr.first['value'] as String;
+    return CashierSession.hashPin(pin, salt) == hash;
+  }
+
+  // ================= Audit =================
   static Future<void> logAudit(
       {required String action,
       String entity = '',
@@ -173,233 +244,6 @@ class LocalDB {
     });
   }
 
-  // ================= Suppliers =================
-  static Future<List<Supplier>> getSuppliers({String search = ''}) async {
-    final d = await db;
-    final s = search.trim();
-    String w = 'is_active = 1';
-    final ar = <Object?>[];
-    if (s.isNotEmpty) {
-      w += ' AND (name LIKE ? OR phone LIKE ?)';
-      ar.addAll(['%$s%', '%$s%']);
-    }
-    final rows = await d.query('suppliers',
-        where: w, whereArgs: ar, orderBy: 'name COLLATE NOCASE');
-    return rows.map(Supplier.fromMap).toList();
-  }
-
-  static Future<List<Supplier>> getAllSuppliers() async {
-    final d = await db;
-    final rows = await d.query('suppliers', orderBy: 'name COLLATE NOCASE');
-    return rows.map(Supplier.fromMap).toList();
-  }
-
-  static Future<int> getSupplierCount() async {
-    final d = await db;
-    final r = await d
-        .rawQuery('SELECT COUNT(*) c FROM suppliers WHERE is_active = 1');
-    return r.first['c'] as int;
-  }
-
-  static Future<int> saveSupplier(Supplier sup) async {
-    final d = await db;
-    final m = sup.toMap();
-    if (sup.id == null) {
-      final id = await d.insert('suppliers', m);
-      await logAudit(
-          action: 'supplier_added',
-          entity: 'supplier',
-          entityId: id,
-          details: sup.name);
-      return id;
-    } else {
-      await d.update('suppliers', m, where: 'id = ?', whereArgs: [sup.id]);
-      await logAudit(
-          action: 'supplier_updated',
-          entity: 'supplier',
-          entityId: sup.id,
-          details: sup.name);
-      return sup.id!;
-    }
-  }
-
-  static Future<void> deleteSupplier(int id) async {
-    final d = await db;
-    final r = await d
-        .query('suppliers', where: 'id = ?', whereArgs: [id], limit: 1);
-    final n = r.isEmpty ? '' : r.first['name'] as String;
-    await d.delete('suppliers', where: 'id = ?', whereArgs: [id]);
-    await logAudit(
-        action: 'supplier_deleted',
-        entity: 'supplier',
-        entityId: id,
-        details: n);
-  }
-
-  // ================= Purchase Orders =================
-  static Future<int> createPurchaseOrder(
-      {required int? supplierId,
-      required String supplierName,
-      required List<POLine> lines,
-      String note = '',
-      int? cashierId}) async {
-    final d = await db;
-    final now = DateTime.now().toIso8601String();
-    double total = 0;
-    for (final l in lines) {
-      total += l.total;
-    }
-    return d.transaction((txn) async {
-      final poId = await txn.insert('purchase_orders', {
-        'supplier_id': supplierId,
-        'supplier_name': supplierName,
-        'status': 'draft',
-        'total': total,
-        'note': note,
-        'created_by': cashierId,
-        'created_at': now,
-        'received_at': null,
-      });
-      for (final l in lines) {
-        await txn.insert('purchase_order_items', {
-          'po_id': poId,
-          'product_id': l.product.id,
-          'name': l.product.name,
-          'qty': l.qty,
-          'cost_price': l.cost,
-          'received_qty': 0,
-        });
-      }
-      await logAudit(
-          action: 'po_created',
-          entity: 'purchase_order',
-          entityId: poId,
-          details: '$supplierName — ${lines.length} صنف');
-      return poId;
-    });
-  }
-
-  static Future<List<PurchaseOrder>> getPurchaseOrders(
-      {String? status, String search = '', int limit = 200}) async {
-    final d = await db;
-    final cl = <String>[];
-    final ar = <Object?>[];
-    if (status != null && status.isNotEmpty) {
-      cl.add('status = ?');
-      ar.add(status);
-    }
-    final s = search.trim();
-    if (s.isNotEmpty) {
-      cl.add('(CAST(id AS TEXT) LIKE ? OR supplier_name LIKE ?)');
-      ar.addAll(['%$s%', '%$s%']);
-    }
-    final w = cl.isEmpty ? '' : 'WHERE ${cl.join(' AND ')}';
-    final rows = await d.rawQuery(
-        'SELECT * FROM purchase_orders $w ORDER BY id DESC LIMIT ?',
-        [...ar, limit]);
-    final list = <PurchaseOrder>[];
-    for (final row in rows) {
-      final it = await d.query('purchase_order_items',
-          where: 'po_id = ?', whereArgs: [row['id']], orderBy: 'id');
-      list.add(PurchaseOrder.fromMaps(row, it));
-    }
-    return list;
-  }
-
-  static Future<PurchaseOrder?> getPurchaseOrder(int id) async {
-    final d = await db;
-    final pr = await d.query('purchase_orders',
-        where: 'id = ?', whereArgs: [id], limit: 1);
-    if (pr.isEmpty) return null;
-    final it = await d.query('purchase_order_items',
-        where: 'po_id = ?', whereArgs: [id], orderBy: 'id');
-    return PurchaseOrder.fromMaps(pr.first, it);
-  }
-
-  static Future<bool> receivePurchaseOrder(
-      int poId, Map<int, double> receivedPerItemId,
-      {int? cashierId}) async {
-    final d = await db;
-    final now = DateTime.now().toIso8601String();
-    return d.transaction((txn) async {
-      final pr = await txn.query('purchase_orders',
-          where: 'id = ?', whereArgs: [poId], limit: 1);
-      if (pr.isEmpty) return false;
-      if (pr.first['status'] != 'draft') return false;
-      final items = await txn.query('purchase_order_items',
-          where: 'po_id = ?', whereArgs: [poId], orderBy: 'id');
-      for (final item in items) {
-        final itemId = item['id'] as int;
-        final rq = receivedPerItemId[itemId] ?? 0.0;
-        if (rq <= 0) continue;
-        final pid = item['product_id'] as int?;
-        final newCost = (item['cost_price'] as num).toDouble();
-        await txn.update('purchase_order_items', {'received_qty': rq},
-            where: 'id = ?', whereArgs: [itemId]);
-        if (pid != null) {
-          final prod = await txn.query('products',
-              where: 'id = ?', whereArgs: [pid], limit: 1);
-          if (prod.isNotEmpty) {
-            final oldBuy = (prod.first['buy_price'] as num).toDouble();
-            await txn.rawUpdate(
-                'UPDATE products SET qty = qty + ?, buy_price = ?, updated_at = ? WHERE id = ?',
-                [rq, newCost, now, pid]);
-            if ((newCost - oldBuy).abs() > 0.0001) {
-              await txn.insert('price_history', {
-                'product_id': pid,
-                'product_name': prod.first['name'] as String,
-                'old_price': oldBuy,
-                'new_price': newCost,
-                'po_id': poId,
-                'created_at': now,
-              });
-            }
-          }
-        }
-      }
-      await txn.update('purchase_orders',
-          {'status': 'received', 'received_at': now},
-          where: 'id = ?', whereArgs: [poId]);
-      await logAudit(
-          action: 'po_received',
-          entity: 'purchase_order',
-          entityId: poId,
-          details: 'استلام أمر شراء #$poId');
-      return true;
-    });
-  }
-
-  static Future<bool> cancelPurchaseOrder(int poId, {int? cashierId}) async {
-    final d = await db;
-    final ok = await d.transaction((txn) async {
-      final pr = await txn.query('purchase_orders',
-          where: 'id = ?', whereArgs: [poId], limit: 1);
-      if (pr.isEmpty) return false;
-      if (pr.first['status'] != 'draft') return false;
-      await txn.update('purchase_orders', {'status': 'cancelled'},
-          where: 'id = ?', whereArgs: [poId]);
-      return true;
-    });
-    if (ok) {
-      await logAudit(
-          action: 'po_cancelled',
-          entity: 'purchase_order',
-          entityId: poId,
-          details: 'إلغاء أمر شراء #$poId');
-    }
-    return ok;
-  }
-
-  static Future<List<PriceChange>> getPriceHistory(int productId) async {
-    final d = await db;
-    final rows = await d.query('price_history',
-        where: 'product_id = ?',
-        whereArgs: [productId],
-        orderBy: 'id DESC');
-    return rows.map(PriceChange.fromMap).toList();
-  }
-
-  // ================= Audit =================
   static Future<List<AuditEntry>> getAuditLog({int limit = 100}) async {
     final d = await db;
     final rows = await d.query('audit_log', orderBy: 'id DESC', limit: limit);
@@ -500,6 +344,34 @@ class LocalDB {
     return r.first['c'] as int;
   }
 
+  static Future<List<Product>> getLowStockProducts() async {
+    final d = await db;
+    final rows = await d.query('products',
+        where: 'is_active = 1 AND qty <= min_qty',
+        orderBy: 'qty ASC, name COLLATE NOCASE');
+    return rows.map(Product.fromMap).toList();
+  }
+
+  static Future<List<Product>> getStaleProducts({int days = 30}) async {
+    final d = await db;
+    final cutoff =
+        DateTime.now().subtract(Duration(days: days)).toIso8601String();
+    final rows = await d.rawQuery(
+        'SELECT * FROM products WHERE is_active = 1 AND qty > 0 AND (last_sold_at = \'\' OR last_sold_at < ?) ORDER BY last_sold_at ASC, name COLLATE NOCASE',
+        [cutoff]);
+    return rows.map(Product.fromMap).toList();
+  }
+
+  static Future<int> getStaleCount({int days = 30}) async {
+    final d = await db;
+    final cutoff =
+        DateTime.now().subtract(Duration(days: days)).toIso8601String();
+    final r = await d.rawQuery(
+        'SELECT COUNT(*) c FROM products WHERE is_active = 1 AND qty > 0 AND (last_sold_at = \'\' OR last_sold_at < ?)',
+        [cutoff]);
+    return r.first['c'] as int;
+  }
+
   static Future<int> saveProduct(Product product) async {
     final d = await db;
     final m = product.toMap();
@@ -564,8 +436,8 @@ class LocalDB {
           'qty': l.qty,
         });
         await txn.rawUpdate(
-            'UPDATE products SET qty = CASE WHEN qty < ? THEN 0 ELSE qty - ? END, updated_at = ? WHERE id = ?',
-            [l.qty, l.qty, now, l.product.id]);
+            'UPDATE products SET qty = CASE WHEN qty < ? THEN 0 ELSE qty - ? END, last_sold_at = ?, updated_at = ? WHERE id = ?',
+            [l.qty, l.qty, now, now, l.product.id]);
       }
       return saleId;
     });
@@ -585,6 +457,19 @@ class LocalDB {
     final r = await d.rawQuery(
         'SELECT COUNT(*) c,COALESCE(SUM(total),0) revenue,COALESCE(SUM(cost),0) cost FROM sales WHERE created_at >= ? AND refunded_at IS NULL',
         [since.toIso8601String()]);
+    final row = r.first;
+    final rev = (row['revenue'] as num).toDouble();
+    final cost = (row['cost'] as num).toDouble();
+    return SalesStats(
+        count: row['c'] as int, revenue: rev, cost: cost, profit: rev - cost);
+  }
+
+  static Future<SalesStats> getSalesStatsRange(
+      DateTime from, DateTime to) async {
+    final d = await db;
+    final r = await d.rawQuery(
+        'SELECT COUNT(*) c,COALESCE(SUM(total),0) revenue,COALESCE(SUM(cost),0) cost FROM sales WHERE created_at >= ? AND created_at < ? AND refunded_at IS NULL',
+        [from.toIso8601String(), to.toIso8601String()]);
     final row = r.first;
     final rev = (row['revenue'] as num).toDouble();
     final cost = (row['cost'] as num).toDouble();
@@ -892,6 +777,23 @@ class LocalDB {
         count: row['c'] as int, total: t, paid: pd, remaining: t - pd);
   }
 
+  static Future<List<Debt>> getOverdueDebts() async {
+    final d = await db;
+    final today = DateTime.now();
+    final t = '${today.year.toString().padLeft(4, '0')}-'
+        '${today.month.toString().padLeft(2, '0')}-'
+        '${today.day.toString().padLeft(2, '0')}';
+    final rows = await d.rawQuery(
+        'SELECT * FROM debts WHERE (amount - paid) > 0.001 AND due_date != \'\' AND due_date < ? ORDER BY due_date ASC',
+        [t]);
+    return rows.map(Debt.fromMap).toList();
+  }
+
+  static Future<int> getOverdueCount() async {
+    final list = await getOverdueDebts();
+    return list.length;
+  }
+
   static Future<void> addDebt(Debt debt) async {
     final d = await db;
     final id = await d.insert('debts', debt.toNewMap());
@@ -932,6 +834,232 @@ class LocalDB {
     final rows = await d.query('debt_payments',
         where: 'debt_id = ?', whereArgs: [debtId], orderBy: 'id DESC');
     return rows.map(DebtPayment.fromMap).toList();
+  }
+
+  // ================= Suppliers =================
+  static Future<List<Supplier>> getSuppliers({String search = ''}) async {
+    final d = await db;
+    final s = search.trim();
+    String w = 'is_active = 1';
+    final ar = <Object?>[];
+    if (s.isNotEmpty) {
+      w += ' AND (name LIKE ? OR phone LIKE ?)';
+      ar.addAll(['%$s%', '%$s%']);
+    }
+    final rows = await d.query('suppliers',
+        where: w, whereArgs: ar, orderBy: 'name COLLATE NOCASE');
+    return rows.map(Supplier.fromMap).toList();
+  }
+
+  static Future<List<Supplier>> getAllSuppliers() async {
+    final d = await db;
+    final rows = await d.query('suppliers', orderBy: 'name COLLATE NOCASE');
+    return rows.map(Supplier.fromMap).toList();
+  }
+
+  static Future<int> getSupplierCount() async {
+    final d = await db;
+    final r = await d
+        .rawQuery('SELECT COUNT(*) c FROM suppliers WHERE is_active = 1');
+    return r.first['c'] as int;
+  }
+
+  static Future<int> saveSupplier(Supplier sup) async {
+    final d = await db;
+    final m = sup.toMap();
+    if (sup.id == null) {
+      final id = await d.insert('suppliers', m);
+      await logAudit(
+          action: 'supplier_added',
+          entity: 'supplier',
+          entityId: id,
+          details: sup.name);
+      return id;
+    } else {
+      await d.update('suppliers', m, where: 'id = ?', whereArgs: [sup.id]);
+      await logAudit(
+          action: 'supplier_updated',
+          entity: 'supplier',
+          entityId: sup.id,
+          details: sup.name);
+      return sup.id!;
+    }
+  }
+
+  static Future<void> deleteSupplier(int id) async {
+    final d = await db;
+    final r = await d
+        .query('suppliers', where: 'id = ?', whereArgs: [id], limit: 1);
+    final n = r.isEmpty ? '' : r.first['name'] as String;
+    await d.delete('suppliers', where: 'id = ?', whereArgs: [id]);
+    await logAudit(
+        action: 'supplier_deleted',
+        entity: 'supplier',
+        entityId: id,
+        details: n);
+  }
+
+  // ================= Purchase Orders =================
+  static Future<int> createPurchaseOrder(
+      {required int? supplierId,
+      required String supplierName,
+      required List<POLine> lines,
+      String note = '',
+      int? cashierId}) async {
+    final d = await db;
+    final now = DateTime.now().toIso8601String();
+    double total = 0;
+    for (final l in lines) {
+      total += l.total;
+    }
+    return d.transaction((txn) async {
+      final poId = await txn.insert('purchase_orders', {
+        'supplier_id': supplierId,
+        'supplier_name': supplierName,
+        'status': 'draft',
+        'total': total,
+        'note': note,
+        'created_by': cashierId,
+        'created_at': now,
+        'received_at': null,
+      });
+      for (final l in lines) {
+        await txn.insert('purchase_order_items', {
+          'po_id': poId,
+          'product_id': l.product.id,
+          'name': l.product.name,
+          'qty': l.qty,
+          'cost_price': l.cost,
+          'received_qty': 0,
+        });
+      }
+      await logAudit(
+          action: 'po_created',
+          entity: 'purchase_order',
+          entityId: poId,
+          details: '$supplierName — ${lines.length} صنف');
+      return poId;
+    });
+  }
+
+  static Future<List<PurchaseOrder>> getPurchaseOrders(
+      {String? status, String search = '', int limit = 200}) async {
+    final d = await db;
+    final cl = <String>[];
+    final ar = <Object?>[];
+    if (status != null && status.isNotEmpty) {
+      cl.add('status = ?');
+      ar.add(status);
+    }
+    final s = search.trim();
+    if (s.isNotEmpty) {
+      cl.add('(CAST(id AS TEXT) LIKE ? OR supplier_name LIKE ?)');
+      ar.addAll(['%$s%', '%$s%']);
+    }
+    final w = cl.isEmpty ? '' : 'WHERE ${cl.join(' AND ')}';
+    final rows = await d.rawQuery(
+        'SELECT * FROM purchase_orders $w ORDER BY id DESC LIMIT ?',
+        [...ar, limit]);
+    final list = <PurchaseOrder>[];
+    for (final row in rows) {
+      final it = await d.query('purchase_order_items',
+          where: 'po_id = ?', whereArgs: [row['id']], orderBy: 'id');
+      list.add(PurchaseOrder.fromMaps(row, it));
+    }
+    return list;
+  }
+
+  static Future<PurchaseOrder?> getPurchaseOrder(int id) async {
+    final d = await db;
+    final pr = await d.query('purchase_orders',
+        where: 'id = ?', whereArgs: [id], limit: 1);
+    if (pr.isEmpty) return null;
+    final it = await d.query('purchase_order_items',
+        where: 'po_id = ?', whereArgs: [id], orderBy: 'id');
+    return PurchaseOrder.fromMaps(pr.first, it);
+  }
+
+  static Future<bool> receivePurchaseOrder(
+      int poId, Map<int, double> receivedPerItemId,
+      {int? cashierId}) async {
+    final d = await db;
+    final now = DateTime.now().toIso8601String();
+    return d.transaction((txn) async {
+      final pr = await txn.query('purchase_orders',
+          where: 'id = ?', whereArgs: [poId], limit: 1);
+      if (pr.isEmpty) return false;
+      if (pr.first['status'] != 'draft') return false;
+      final items = await txn.query('purchase_order_items',
+          where: 'po_id = ?', whereArgs: [poId], orderBy: 'id');
+      for (final item in items) {
+        final itemId = item['id'] as int;
+        final rq = receivedPerItemId[itemId] ?? 0.0;
+        if (rq <= 0) continue;
+        final pid = item['product_id'] as int?;
+        final newCost = (item['cost_price'] as num).toDouble();
+        await txn.update('purchase_order_items', {'received_qty': rq},
+            where: 'id = ?', whereArgs: [itemId]);
+        if (pid != null) {
+          final prod = await txn.query('products',
+              where: 'id = ?', whereArgs: [pid], limit: 1);
+          if (prod.isNotEmpty) {
+            final oldBuy = (prod.first['buy_price'] as num).toDouble();
+            await txn.rawUpdate(
+                'UPDATE products SET qty = qty + ?, buy_price = ?, updated_at = ? WHERE id = ?',
+                [rq, newCost, now, pid]);
+            if ((newCost - oldBuy).abs() > 0.0001) {
+              await txn.insert('price_history', {
+                'product_id': pid,
+                'product_name': prod.first['name'] as String,
+                'old_price': oldBuy,
+                'new_price': newCost,
+                'po_id': poId,
+                'created_at': now,
+              });
+            }
+          }
+        }
+      }
+      await txn.update('purchase_orders',
+          {'status': 'received', 'received_at': now},
+          where: 'id = ?', whereArgs: [poId]);
+      await logAudit(
+          action: 'po_received',
+          entity: 'purchase_order',
+          entityId: poId,
+          details: 'استلام أمر شراء #$poId');
+      return true;
+    });
+  }
+
+  static Future<bool> cancelPurchaseOrder(int poId, {int? cashierId}) async {
+    final d = await db;
+    final ok = await d.transaction((txn) async {
+      final pr = await txn.query('purchase_orders',
+          where: 'id = ?', whereArgs: [poId], limit: 1);
+      if (pr.isEmpty) return false;
+      if (pr.first['status'] != 'draft') return false;
+      await txn.update('purchase_orders', {'status': 'cancelled'},
+          where: 'id = ?', whereArgs: [poId]);
+      return true;
+    });
+    if (ok) {
+      await logAudit(
+          action: 'po_cancelled',
+          entity: 'purchase_order',
+          entityId: poId,
+          details: 'إلغاء أمر شراء #$poId');
+    }
+    return ok;
+  }
+
+  static Future<List<PriceChange>> getPriceHistory(int productId) async {
+    final d = await db;
+    final rows = await d.query('price_history',
+        where: 'product_id = ?',
+        whereArgs: [productId],
+        orderBy: 'id DESC');
+    return rows.map(PriceChange.fromMap).toList();
   }
 
   // ================= Settings =================

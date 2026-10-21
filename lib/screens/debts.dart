@@ -38,7 +38,9 @@ class _DebtsScreenState extends State<DebtsScreen> {
 
   Future<void> _add() async {
     final saved = await showModalBottomSheet<bool>(
-        context: context, isScrollControlled: true, builder: (_) => const _DebtForm());
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => const _DebtForm());
     if (saved == true) _load();
   }
 
@@ -60,7 +62,9 @@ class _DebtsScreenState extends State<DebtsScreen> {
                       validator: (v) {
                         final n = double.tryParse(v?.trim() ?? '');
                         if (n == null || n <= 0) return 'غير صالح';
-                        if (n > debt.remaining + 0.001) return 'أكبر من المتبقي';
+                        if (n > debt.remaining + 0.001) {
+                          return 'أكبر من المتبقي';
+                        }
                         amt = n;
                         return null;
                       })),
@@ -97,7 +101,8 @@ class _DebtsScreenState extends State<DebtsScreen> {
                     const Padding(
                         padding: EdgeInsets.all(16),
                         child: Text('سجل السداد',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold))),
                     ...p.map((x) => ListTile(
                         dense: true,
                         title: Text(formatMoney(x.amount, _settings.currency)),
@@ -120,9 +125,10 @@ class _DebtsScreenState extends State<DebtsScreen> {
                   child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _mini('الإجمالي', formatMoney(_summary.total, _settings.currency)),
-                        _mini('المتبقي',
-                            formatMoney(_summary.remaining, _settings.currency)),
+                        _mini('الإجمالي',
+                            formatMoney(_summary.total, _settings.currency)),
+                        _mini('المتبقي', formatMoney(
+                            _summary.remaining, _settings.currency)),
                         _mini('العملاء', '${_summary.count}'),
                       ]))),
           Padding(
@@ -148,23 +154,39 @@ class _DebtsScreenState extends State<DebtsScreen> {
                           itemBuilder: (ctx, i) {
                             final d = _debts[i];
                             final paid = d.remaining <= 0.001;
+                            final sub = [
+                              'الدين: ${formatMoney(d.amount, _settings.currency)}',
+                              'المدفوع: ${formatMoney(d.paid, _settings.currency)}',
+                              'المتبقي: ${formatMoney(d.remaining, _settings.currency)}',
+                              if (d.dueDate.isNotEmpty) 'الاستحقاق: ${d.dueDate}',
+                            ].join('\n');
                             return ListTile(
-                              title: Text(d.customer),
-                              subtitle: Text(
-                                  'الدين: ${formatMoney(d.amount, _settings.currency)}\nالمدفوع: ${formatMoney(d.paid, _settings.currency)}\nالمتبقي: ${formatMoney(d.remaining, _settings.currency)}'),
+                              title: Row(children: [
+                                Expanded(child: Text(d.customer)),
+                                if (d.isOverdue)
+                                  const Padding(
+                                      padding: EdgeInsets.only(right: 8),
+                                      child: Chip(
+                                          label: Text('متأخر'),
+                                          visualDensity: VisualDensity.compact,
+                                          backgroundColor: Colors.red)),
+                              ]),
+                              subtitle: Text(sub),
                               isThreeLine: true,
                               trailing: paid
                                   ? IconButton(
                                       onPressed: () => _history(d),
                                       icon: const Icon(Icons.history))
-                                  : Row(mainAxisSize: MainAxisSize.min, children: [
-                                      IconButton(
-                                          onPressed: () => _history(d),
-                                          icon: const Icon(Icons.history)),
-                                      FilledButton(
-                                          onPressed: () => _pay(d),
-                                          child: const Text('تسديد')),
-                                    ]),
+                                  : Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                            onPressed: () => _history(d),
+                                            icon: const Icon(Icons.history)),
+                                        FilledButton(
+                                            onPressed: () => _pay(d),
+                                            child: const Text('تسديد')),
+                                      ]),
                             );
                           })),
         ],
@@ -191,6 +213,7 @@ class _DebtFormState extends State<_DebtForm> {
   final _ph = TextEditingController();
   final _am = TextEditingController();
   final _nt = TextEditingController();
+  DateTime? _due;
 
   @override
   void dispose() {
@@ -201,6 +224,19 @@ class _DebtFormState extends State<_DebtForm> {
     super.dispose();
   }
 
+  String _fmt(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Future<void> _pickDue() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+        context: context,
+        initialDate: _due ?? now.add(const Duration(days: 7)),
+        firstDate: now.subtract(const Duration(days: 365)),
+        lastDate: now.add(const Duration(days: 365 * 3)));
+    if (picked != null) setState(() => _due = picked);
+  }
+
   Future<void> _save() async {
     if (!_fk.currentState!.validate()) return;
     await LocalDB.addDebt(Debt(
@@ -208,6 +244,7 @@ class _DebtFormState extends State<_DebtForm> {
         phone: _ph.text.trim(),
         amount: double.tryParse(_am.text.trim()) ?? 0,
         note: _nt.text.trim(),
+        dueDate: _due == null ? '' : _fmt(_due!),
         createdAt: DateTime.now().toIso8601String()));
     if (!mounted) return;
     Navigator.pop(context, true);
@@ -247,6 +284,21 @@ class _DebtFormState extends State<_DebtForm> {
                     if (n == null || n <= 0) return 'غير صالح';
                     return null;
                   }),
+              const SizedBox(height: 12),
+              InkWell(
+                onTap: _pickDue,
+                child: InputDecorator(
+                  decoration:
+                      const InputDecoration(labelText: 'تاريخ الاستحقاق (اختياري)'),
+                  child: Row(children: [
+                    Expanded(
+                        child: Text(_due == null
+                            ? '— بدون —'
+                            : _fmt(_due!))),
+                    const Icon(Icons.event),
+                  ]),
+                ),
+              ),
               const SizedBox(height: 12),
               TextFormField(
                   controller: _nt,

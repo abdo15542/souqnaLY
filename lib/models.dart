@@ -334,6 +334,7 @@ class Debt {
   final double amount;
   final double paid;
   final String note;
+  final String dueDate;
   final String createdAt;
 
   Debt(
@@ -343,9 +344,20 @@ class Debt {
       required this.amount,
       this.paid = 0,
       this.note = '',
+      this.dueDate = '',
       required this.createdAt});
 
   double get remaining => amount - paid;
+  bool get isOverdue =>
+      remaining > 0.001 && dueDate.isNotEmpty && _isPast(dueDate);
+
+  static bool _isPast(String d) {
+    final dt = DateTime.tryParse(d);
+    if (dt == null) return false;
+    final today = DateTime.now();
+    final t = DateTime(today.year, today.month, today.day);
+    return dt.isBefore(t);
+  }
 
   Map<String, dynamic> toNewMap() => {
         'customer': customer,
@@ -353,6 +365,7 @@ class Debt {
         'amount': amount,
         'paid': paid,
         'note': note,
+        'due_date': dueDate,
         'created_at': createdAt,
       };
 
@@ -363,6 +376,7 @@ class Debt {
         amount: (m['amount'] as num).toDouble(),
         paid: (m['paid'] as num?)?.toDouble() ?? 0,
         note: (m['note'] as String?) ?? '',
+        dueDate: (m['due_date'] as String?) ?? '',
         createdAt: m['created_at'] as String,
       );
 }
@@ -399,20 +413,6 @@ class DebtsSummary {
       required this.remaining});
   factory DebtsSummary.empty() =>
       const DebtsSummary(count: 0, total: 0, paid: 0, remaining: 0);
-}
-
-class AppSettings {
-  final String shopName;
-  final String phone;
-  final String address;
-  final String currency;
-  const AppSettings(
-      {required this.shopName,
-      required this.phone,
-      required this.address,
-      required this.currency});
-  factory AppSettings.defaults() => const AppSettings(
-      shopName: 'سوقنا', phone: '', address: '', currency: 'د.ل');
 }
 
 class Supplier {
@@ -578,4 +578,18 @@ class PriceChange {
         poId: m['po_id'] as int?,
         createdAt: m['created_at'] as String,
       );
+}
+
+class AppSettings {
+  final String shopName;
+  final String phone;
+  final String address;
+  final String currency;
+  const AppSettings(
+      {required this.shopName,
+      required this.phone,
+      required this.address,
+      required this.currency});
+  factory AppSettings.defaults() => const AppSettings(
+      shopName: 'سوقنا', phone: '', address: '', currency: 'د.ل');
 }
