@@ -731,3 +731,94 @@ class Advance {
         settledAt: m['settled_at'] as String?,
       );
 }
+
+class InsightSettings {
+  final int leadTimeDays;
+  final double safetyFactor;
+  final int staleDays;
+  final double voidAlertRate;
+  final double abcA;
+  final double abcB;
+
+  const InsightSettings({
+    required this.leadTimeDays,
+    required this.safetyFactor,
+    required this.staleDays,
+    required this.voidAlertRate,
+    required this.abcA,
+    required this.abcB,
+  });
+
+  factory InsightSettings.defaults() => const InsightSettings(
+        leadTimeDays: 7,
+        safetyFactor: 0.5,
+        staleDays: 60,
+        voidAlertRate: 0.10,
+        abcA: 0.80,
+        abcB: 0.95,
+      );
+}
+
+class PurchaseSuggestion {
+  final Product product;
+  final double avgDaily;
+  final double reorderPoint;
+  final double suggestedQty;
+  final double urgency;
+  final String reason;
+
+  PurchaseSuggestion({
+    required this.product,
+    required this.avgDaily,
+    required this.reorderPoint,
+    required this.suggestedQty,
+    required this.urgency,
+    required this.reason,
+  });
+}
+
+class AbcXyzItem {
+  final Product product;
+  final double revenue;
+  final double revenueShare;
+  final double cumulativeShare;
+  final String abc;
+  final String xyz;
+  final String matrix;
+  final String recommendation;
+
+  AbcXyzItem({
+    required this.product,
+    required this.revenue,
+    required this.revenueShare,
+    required this.cumulativeShare,
+    required this.abc,
+    required this.xyz,
+    required this.matrix,
+    required this.recommendation,
+  });
+}
+
+class AnomalyFlag {
+  final String title;
+  final String details;
+  final String severity;
+
+  AnomalyFlag({
+    required this.title,
+    required this.details,
+    required this.severity,
+  });
+}
+
+class ForecastPoint {
+  final String day;
+  final double predictedUnits;
+  final double predictedRevenue;
+
+  ForecastPoint({
+    required this.day,
+    required this.predictedUnits,
+    required this.predictedRevenue,
+  });
+}
