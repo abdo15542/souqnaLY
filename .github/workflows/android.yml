@@ -24,96 +24,25 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Ensure Android platform exists
+      - name: Ensure Android platform
         run: |
           if [ ! -d android ]; then
             tmp=$(mktemp -d)
             flutter create --project-name souqna_ly --org ly.souqna --platforms android "$tmp/scaffold"
             cp -R "$tmp/scaffold/android" ./android
-            cp "$tmp/scaffold/.metadata" ./.metadata || true
-            chmod +x android/gradlew || true
             rm -rf "$tmp"
           fi
 
-      - name: Fix Gradle Configurations (Critical for file_picker & SDK 36)
+      - name: Apply label and SDK fix
         run: |
-          GKTS=android/app/build.gradle.kts
-          GGROOVY=android/app/build.gradle
-          ROOT_GKTS=android/build.gradle.kts
-          ROOT_GGROOVY=android/build.gradle
-          
-          TARGET_APP=""
-          IS_KOTLIN=false
-          
-          # Determine which app gradle file exists
-          if [ -f "$GKTS" ]; then
-            TARGET_APP="$GKTS"
-            IS_KOTLIN=true
-          elif [ -f "$GGROOVY" ]; then
-            TARGET_APP="$GGROOVY"
-            IS_KOTLIN=false
-          fi
-
-          if [ -n "$TARGET_APP" ]; then
-            echo "Updating $TARGET_APP..."
-            
-            # 1. Set Arabic Label in Manifest
-            M=android/app/src/main/AndroidManifest.xml
+          M=android/app/src/main/AndroidManifest.xml
+          if [ -f "$M" ]; then
             sed -i 's/android:label="[^"]*"/android:label="سوقنا"/g' "$M"
-            
-            # 2. Add Camera Permission
-            if ! grep -q "CAMERA" "$M"; then
-               sed -i 's#</manifest>#  <uses-permission android:name="android.permission.CAMERA" />\n  <uses-feature android:name="android.hardware.camera" android:required="false" />\n</manifest>#' "$M"
-            fi
-
-            # 3. Update App Module SDK Versions
-            if [ "$IS_KOTLIN" = true ]; then
-               sed -i 's/minSdk\s*=\s*.*/minSdk = 21/' "$TARGET_APP"
-               # Insert compileSdk = 36 after 'android {'
-               sed -i '/^android {$/a\    compileSdk = 36' "$TARGET_APP" || true
-            else
-               sed -i 's/minSdkVersion\s*.*/minSdkVersion 21/' "$TARGET_APP"
-               sed -i '/^android {$/a\    compileSdkVersion 36' "$TARGET_APP" || true
-            fi
-            
-            # Remove duplicates if any
-            awk '!seen[$0]++ || !/^ *compileSdk/' "$TARGET_APP" > temp && mv temp "$TARGET_APP"
           fi
-
-          # 4. CRITICAL FIX: Force ALL SUBPROJECTS to use compileSdk 36
-          # This fixes the error where file_picker tries to compile against SDK 34
-          if [ "$IS_KOTLIN" = true ]; then
-             # Append to root build.gradle.kts
-             cat >> "$ROOT_GKTS" << 'GRADLE_EOF'
-allprojects {
-    tasks.withType<com.android.build.gradle.tasks.AarMetadataTask>().configureEach {
-        // Ignore AAR metadata checks that fail due to mismatched compileSdk
-        ignoreFailures.set(true)
-    }
-    
-    // Force all subprojects to use compileSdk 36
-    afterEvaluate {
-        extensions.findByType(com.android.build.gradle.BaseExtension)?.apply {
-            compileSdkVersion(36)
-        }
-    }
-}
-GRADLE_EOF
-          else
-             # Append to root build.gradle
-             cat >> "$ROOT_GGROOVY" << 'GRADLE_EOF'
-allprojects {
-    tasks.withType(com.android.build.gradle.tasks.AarMetadataTask).configureEach {
-        ignoreFailures = true
-    }
-    
-    afterEvaluate {
-        if (project.extensions.findByName('android') != null) {
-            project.extensions.getByType(com.android.build.gradle.BaseExtension).compileSdkVersion(36)
-        }
-    }
-}
-GRADLE_EOF
+          if [ -f android/build.gradle.kts ]; then
+            cat force_sdk.txt >> android/build.gradle.kts
+          elif [ -f android/build.gradle ]; then
+            printf '\nsubprojects { afterEvaluate { if (project.extensions.findByName("android")) project.extensions.getByType(com.android.build.gradle.BaseExtension).compileSdkVersion(36) } }\n' >> android/build.gradle
           fi
 
       - name: Install dependencies

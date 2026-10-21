@@ -1,7 +1,7 @@
 name: souqna_ly
 description: سوقنا — نظام إدارة المحلات الصغيرة، محلي أولاً.
 publish_to: 'none'
-version: 1.6.0+1
+version: 1.6.1+2
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -9,26 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  
-  # قاعدة البيانات المحلية
   sqflite: ^2.4.0
   path: ^1.9.0
   path_provider: ^2.1.5
-
-  # المشاركة والنسخ الاحتياطي
-  share_plus: ^10.1.4
-  cross_file: ^0.3.4+2
-  file_picker: ^8.1.7
-
-  # الباركود (أحدث إصدار متوافق مع Kotlin الحديث)
-  mobile_scanner: ^6.0.2
-  
-  # الرسوم البيانية
-  fl_chart: ^0.69.0
-
-  # الطباعة والتقارير (بديل حديث ومستقر لـ flutter_html_to_pdf)
-  printing: ^5.13.0
-  pdf: ^3.11.0
 
 dev_dependencies:
   flutter_test:
