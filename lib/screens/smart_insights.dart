@@ -431,8 +431,8 @@ class _SmartInsightsScreenState extends State<SmartInsightsScreen>
 
     if (ok == true && chosen != null) {
       await LocalDB.createPurchaseOrder(
-        supplierId: chosen.id,
-        supplierName: chosen.name,
+        supplierId: chosen!.id,
+        supplierName: chosen!.name,
         lines: [
           POLine(
             product: s.product,
