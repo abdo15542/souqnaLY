@@ -1,6 +1,0 @@
-
-subprojects {
-    afterEvaluate {
-        extensions.findByType(com.android.build.gradle.BaseExtension::class.java)?.compileSdk = 36
-    }
-}

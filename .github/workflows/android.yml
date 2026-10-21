@@ -33,16 +33,11 @@ jobs:
             rm -rf "$tmp"
           fi
 
-      - name: Apply label and SDK fix
+      - name: Set Arabic app label
         run: |
           M=android/app/src/main/AndroidManifest.xml
           if [ -f "$M" ]; then
             sed -i 's/android:label="[^"]*"/android:label="سوقنا"/g' "$M"
-          fi
-          if [ -f android/build.gradle.kts ]; then
-            cat force_sdk.txt >> android/build.gradle.kts
-          elif [ -f android/build.gradle ]; then
-            printf '\nsubprojects { afterEvaluate { if (project.extensions.findByName("android")) project.extensions.getByType(com.android.build.gradle.BaseExtension).compileSdkVersion(36) } }\n' >> android/build.gradle
           fi
 
       - name: Install dependencies
