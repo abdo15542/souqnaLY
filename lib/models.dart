@@ -990,3 +990,93 @@ class ChainVerifyResult {
     required this.message,
   });
 }
+
+class ShiftBreakdown {
+  final double sales;
+  final double debtPaid;
+  final double expenses;
+  final double payroll;
+  final double expectedDelta;
+  final double openingCash;
+  final double expectedDrawer;
+
+  const ShiftBreakdown({
+    required this.sales,
+    required this.debtPaid,
+    required this.expenses,
+    required this.payroll,
+    required this.expectedDelta,
+    required this.openingCash,
+    required this.expectedDrawer,
+  });
+
+  factory ShiftBreakdown.empty() => const ShiftBreakdown(
+        sales: 0,
+        debtPaid: 0,
+        expenses: 0,
+        payroll: 0,
+        expectedDelta: 0,
+        openingCash: 0,
+        expectedDrawer: 0,
+      );
+}
+
+class Shift {
+  final int id;
+  final int? openedByCashierId;
+  final String openedByName;
+  final String openedAt;
+  final String? closedAt;
+  final String status;
+  final double openingCash;
+  final double? countedCash;
+  final double salesTotal;
+  final double debtPaidTotal;
+  final double expenseTotal;
+  final double payrollTotal;
+  final double expectedDelta;
+  final double expectedDrawer;
+  final double? difference;
+  final String note;
+
+  Shift({
+    required this.id,
+    this.openedByCashierId,
+    required this.openedByName,
+    required this.openedAt,
+    this.closedAt,
+    required this.status,
+    required this.openingCash,
+    this.countedCash,
+    required this.salesTotal,
+    required this.debtPaidTotal,
+    required this.expenseTotal,
+    required this.payrollTotal,
+    required this.expectedDelta,
+    required this.expectedDrawer,
+    this.difference,
+    required this.note,
+  });
+
+  bool get isOpen => status == 'open';
+  bool get isClosed => status == 'closed';
+
+  factory Shift.fromMap(Map<String, dynamic> m) => Shift(
+        id: m['id'] as int,
+        openedByCashierId: m['opened_by_cashier_id'] as int?,
+        openedByName: (m['opened_by_name'] as String?) ?? '',
+        openedAt: m['opened_at'] as String,
+        closedAt: m['closed_at'] as String?,
+        status: (m['status'] as String?) ?? 'open',
+        openingCash: (m['opening_cash'] as num?)?.toDouble() ?? 0,
+        countedCash: (m['counted_cash'] as num?)?.toDouble(),
+        salesTotal: (m['sales_total'] as num?)?.toDouble() ?? 0,
+        debtPaidTotal: (m['debt_paid_total'] as num?)?.toDouble() ?? 0,
+        expenseTotal: (m['expense_total'] as num?)?.toDouble() ?? 0,
+        payrollTotal: (m['payroll_total'] as num?)?.toDouble() ?? 0,
+        expectedDelta: (m['expected_delta'] as num?)?.toDouble() ?? 0,
+        expectedDrawer: (m['expected_drawer'] as num?)?.toDouble() ?? 0,
+        difference: (m['difference'] as num?)?.toDouble(),
+        note: (m['note'] as String?) ?? '',
+      );
+}
