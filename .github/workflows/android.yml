@@ -33,11 +33,14 @@ jobs:
             rm -rf "$tmp"
           fi
 
-      - name: Set Arabic app label
+      - name: Set label and camera permission
         run: |
           M=android/app/src/main/AndroidManifest.xml
           if [ -f "$M" ]; then
             sed -i 's/android:label="[^"]*"/android:label="سوقنا"/g' "$M"
+            if ! grep -q "CAMERA" "$M"; then
+              sed -i 's#</manifest>#  <uses-permission android:name="android.permission.CAMERA" />\n  <uses-feature android:name="android.hardware.camera" android:required="false" />\n</manifest>#' "$M"
+            fi
           fi
 
       - name: Install dependencies
