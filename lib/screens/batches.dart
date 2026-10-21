@@ -184,7 +184,7 @@ class _BatchesScreenState extends State<BatchesScreen> {
                                 leading: Icon(Icons.inventory, color: col),
                                 title: Text(b.productName),
                                 subtitle: Text(
-                                    'كمية: ${formatQty(b.qty)} • انتهاء: ${b.expiresAt}\n${b.note.isEmpty ? '' : 'ملاحظة: ${b.note}'}`,
+                                    'كمية: ${formatQty(b.qty)} • انتهاء: ${b.expiresAt}\n${b.note.isEmpty ? '' : 'ملاحظة: ${b.note}'}',
                                     ),
                                 isThreeLine: true,
                                 trailing: Row(
