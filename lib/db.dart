@@ -8,7 +8,7 @@ class LocalDB {
 
   static Future<Database> _init() async {
     return openDatabase(
-      join(await getDatabasesPath(), 'souqna_clean.db'),
+      p.join(await getDatabasesPath(), 'souqna_clean.db'),
       version: 1,
       onCreate: (d, v) async {
         await d.execute('CREATE TABLE products(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, buy_price REAL NOT NULL, sell_price REAL NOT NULL, qty REAL NOT NULL)');
