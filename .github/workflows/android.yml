@@ -1,0 +1,90 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Ensure Android platform exists
+        run: |
+          if [ ! -d android ]; then
+            tmp=$(mktemp -d)
+            flutter create --project-name souqna_ly --org ly.souqna --platforms android "$tmp/scaffold"
+            cp -R "$tmp/scaffold/android" ./android
+            cp "$tmp/scaffold/.metadata" ./.metadata || true
+            chmod +x android/gradlew || true
+            rm -rf "$tmp"
+          fi
+
+      - name: Fix Gradle Configurations
+        run: |
+          GKTS=android/app/build.gradle.kts
+          GGROOVY=android/app/build.gradle
+          
+          TARGET_FILE=""
+          IS_KOTLIN=false
+          
+          if [ -f "$GKTS" ]; then
+            TARGET_FILE="$GKTS"
+            IS_KOTLIN=true
+          elif [ -f "$GGROOVY" ]; then
+            TARGET_FILE="$GGROOVY"
+            IS_KOTLIN=false
+          fi
+
+          if [ -n "$TARGET_FILE" ]; then
+            echo "Updating $TARGET_FILE..."
+            
+            # Set Arabic Label in Manifest
+            M=android/app/src/main/AndroidManifest.xml
+            sed -i 's/android:label="[^"]*"/android:label="سوقنا"/g' "$M"
+            
+            # Add Camera Permission
+            if ! grep -q "CAMERA" "$M"; then
+               sed -i 's#</manifest>#  <uses-permission android:name="android.permission.CAMERA" />\n  <uses-feature android:name="android.hardware.camera" android:required="false" />\n</manifest>#' "$M"
+            fi
+
+            # Update SDK Versions
+            if [ "$IS_KOTLIN" = true ]; then
+               sed -i 's/minSdk\s*=\s*.*/minSdk = 21/' "$TARGET_FILE"
+               # Insert compileSdk = 36 after 'android {'
+               sed -i '/^android {$/a\    compileSdk = 36' "$TARGET_FILE" || true
+            else
+               sed -i 's/minSdkVersion\s*.*/minSdkVersion 21/' "$TARGET_FILE"
+               sed -i '/^android {$/a\    compileSdkVersion 36' "$TARGET_FILE" || true
+            fi
+            
+            # Remove duplicates if any
+            awk '!seen[$0]++ || !/^ *compileSdk/' "$TARGET_FILE" > temp && mv temp "$TARGET_FILE"
+          fi
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build release APK
+        run: flutter build apk --release --no-tree-shake-icons
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: souqnaLY-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
