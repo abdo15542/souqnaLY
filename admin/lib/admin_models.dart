@@ -48,6 +48,7 @@ class Shop {
 class LicenseRecord {
   final int? id;
   final String shopId;
+  final String plan;
   final List<String> features;
   final int maxDevices;
   final String issuedAt;
@@ -65,6 +66,7 @@ class LicenseRecord {
   LicenseRecord({
     this.id,
     required this.shopId,
+    required this.plan,
     required this.features,
     required this.maxDevices,
     required this.issuedAt,
@@ -82,6 +84,7 @@ class LicenseRecord {
 
   Map<String, dynamic> toMap() => {
         'shop_id': shopId,
+        'plan': plan,
         'features': features.join(','),
         'max_devices': maxDevices,
         'issued_at': issuedAt,
@@ -100,6 +103,7 @@ class LicenseRecord {
   factory LicenseRecord.fromMap(Map<String, dynamic> m) => LicenseRecord(
         id: m['id'] as int?,
         shopId: (m['shop_id'] as String?) ?? '',
+        plan: (m['plan'] as String?) ?? '',
         features: ((m['features'] as String?) ?? '')
             .split(',')
             .where((e) => e.isNotEmpty)
