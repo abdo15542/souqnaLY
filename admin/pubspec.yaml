@@ -1,0 +1,21 @@
+name: souqna_admin
+description: Souqna Publisher Admin Console (offline).
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  sqflite: '>=2.0.0 <3.0.0'
+  path: '>=1.8.0 <2.0.0'
+  crypto: '>=3.0.0 <4.0.0'
+  share_plus: '>=7.0.0 <12.0.0'
+
+dev_dependencies:
+  flutter_lints: '>=3.0.0 <6.0.0'
+
+flutter:
+  uses-material-design: true

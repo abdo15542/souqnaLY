@@ -1,0 +1,38 @@
+name: Build Admin APK
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'admin/**'
+      - '.github/workflows/build-admin.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Generate native scaffolding
+        working-directory: admin
+        run: |
+          flutter create . --org com.abdo15542 --project-name souqna_admin || true
+          git checkout -- pubspec.yaml lib/ 2>/dev/null || true
+
+      - name: Pub get
+        working-directory: admin
+        run: flutter pub get
+
+      - name: Build APK
+        working-directory: admin
+        run: flutter build apk --release --no-tree-shake-icons
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: souqna-admin-release-apk
+          path: admin/build/app/outputs/flutter-apk/app-release.apk

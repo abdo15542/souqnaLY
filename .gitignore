@@ -10,3 +10,14 @@ pubspec.lock
 .DS_Store
 Thumbs.db
 node_modules/
+
+# Admin generated scaffolding (rebuilt in CI)
+admin/android/
+admin/ios/
+admin/web/
+admin/linux/
+admin/macos/
+admin/windows/
+admin/build/
+admin/.dart_tool/
+admin/pubspec.lock
