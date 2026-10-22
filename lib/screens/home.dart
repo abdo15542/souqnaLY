@@ -28,6 +28,7 @@ import 'smart_insights.dart';
 import 'stock_take.dart';
 import 'suppliers.dart';
 import 'vendor_license.dart';
+import 'renewal_request.dart';
 import '../utils.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -568,14 +569,36 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: const TextStyle(
                         fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: phone));
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                        const SnackBar(content: Text('تم نسخ رقم الدعم')));
-                  },
-                  icon: const Icon(Icons.copy),
-                  label: const Text('نسخ الرقم'),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: phone));
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(content: Text('تم نسخ رقم الدعم')));
+                        },
+                        icon: const Icon(Icons.copy),
+                        label: const Text('نسخ الرقم'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(
+                            ctx,
+                            MaterialPageRoute(
+                                builder: (_) =>
+                                    const RenewalRequestScreen()),
+                          );
+                        },
+                        icon: const Icon(Icons.share),
+                        label: const Text('طلب تجديد'),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
               ],
