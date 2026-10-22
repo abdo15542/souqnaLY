@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
+
 import 'db.dart';
-import 'screens/app_lock.dart';
+import 'screens/onboarding.dart';
+import 'services/device_service.dart';
 import 'theme_state.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   final mode = await LocalDB.getThemeMode();
   appTheme.value = _toMode(mode);
+
+  await DeviceService.bootstrap();
+
   runApp(const SouqnaApp());
 }
 
@@ -23,6 +29,7 @@ ThemeMode _toMode(String s) {
 
 class SouqnaApp extends StatelessWidget {
   const SouqnaApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
@@ -46,7 +53,7 @@ class SouqnaApp extends StatelessWidget {
           textDirection: TextDirection.rtl,
           child: child ?? const SizedBox.shrink(),
         ),
-        home: const AppLockScreen(),
+        home: const RootScreen(),
       ),
     );
   }
