@@ -1037,3 +1037,84 @@ class Shift {
         note: (m['note'] as String?) ?? '',
       );
 }
+
+
+class ProductBatch {
+  final int? id;
+  final int productId;
+  final String productName;
+  final String batchNo;
+  final double qty;
+  final double cost;
+  final String expiryDate;
+  final String note;
+  final String createdAt;
+  final String updatedAt;
+
+  ProductBatch({
+    this.id,
+    required this.productId,
+    required this.productName,
+    this.batchNo = '',
+    required this.qty,
+    required this.cost,
+    this.expiryDate = '',
+    this.note = '',
+    this.createdAt = '',
+    this.updatedAt = '',
+  });
+
+  double get totalValue => qty * cost;
+
+  Map<String, dynamic> toMap() {
+    final now = DateTime.now().toIso8601String();
+    return {
+      'product_id': productId,
+      'product_name': productName,
+      'batch_no': batchNo,
+      'qty': qty,
+      'cost': cost,
+      'expiry_date': expiryDate,
+      'note': note,
+      'created_at': createdAt.isEmpty ? now : createdAt,
+      'updated_at': now,
+    };
+  }
+
+  factory ProductBatch.fromMap(Map<String, dynamic> m) => ProductBatch(
+        id: m['id'] as int?,
+        productId: m['product_id'] as int,
+        productName: (m['product_name'] as String?) ?? '',
+        batchNo: (m['batch_no'] as String?) ?? '',
+        qty: (m['qty'] as num?)?.toDouble() ?? 0,
+        cost: (m['cost'] as num?)?.toDouble() ?? 0,
+        expiryDate: (m['expiry_date'] as String?) ?? '',
+        note: (m['note'] as String?) ?? '',
+        createdAt: (m['created_at'] as String?) ?? '',
+        updatedAt: (m['updated_at'] as String?) ?? '',
+      );
+}
+
+class BatchExpirySummary {
+  final int total;
+  final int expiringSoon;
+  final int expired;
+  final double soonValue;
+  final double expiredValue;
+
+  const BatchExpirySummary({
+    required this.total,
+    required this.expiringSoon,
+    required this.expired,
+    required this.soonValue,
+    required this.expiredValue,
+  });
+
+  factory BatchExpirySummary.empty() => const BatchExpirySummary(
+        total: 0,
+        expiringSoon: 0,
+        expired: 0,
+        soonValue: 0,
+        expiredValue: 0,
+      );
+}
