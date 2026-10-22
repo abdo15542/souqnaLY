@@ -9,6 +9,7 @@ import '../license_signer.dart';
 
 class LicenseIssueScreen extends StatefulWidget {
   final Shop shop;
+
   const LicenseIssueScreen({super.key, required this.shop});
 
   @override
@@ -16,16 +17,18 @@ class LicenseIssueScreen extends StatefulWidget {
 }
 
 class _LicenseIssueScreenState extends State<LicenseIssueScreen> {
-  bool _loading = true;
-  List<LicenseRecord> _licenses = <LicenseRecord>[];
-
   final GlobalKey<FormState> _k = GlobalKey<FormState>();
+
   final TextEditingController _days = TextEditingController(text: '30');
   final TextEditingController _maxDevices = TextEditingController(text: '3');
   final TextEditingController _grace = TextEditingController(text: '7');
   final TextEditingController _plan = TextEditingController(text: 'pro');
 
+  bool _loading = true;
+  List<LicenseRecord> _licenses = <LicenseRecord>[];
+
   late List<String> _features;
+
   bool _allowExport = true;
   bool _allowBackup = true;
   bool _allowBranches = false;
@@ -35,7 +38,7 @@ class _LicenseIssueScreenState extends State<LicenseIssueScreen> {
   void initState() {
     super.initState();
     _features = List<String>.from(Features.all);
-    _plan.text = widget.shop.plan;
+    _plan.text = widget.shop.plan.isEmpty ? 'pro' : widget.shop.plan;
     _load();
   }
 
@@ -53,10 +56,18 @@ class _LicenseIssueScreenState extends State<LicenseIssueScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
   }
 
+  bool _isExpired(String value) {
+    final e = DateTime.tryParse(value);
+    return e != null && DateTime.now().isAfter(e);
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
+
     final list = await AdminDB.getLicenses(widget.shop.id);
+
     if (!mounted) return;
+
     setState(() {
       _licenses = list;
       _loading = false;
@@ -66,15 +77,31 @@ class _LicenseIssueScreenState extends State<LicenseIssueScreen> {
   Future<void> _issue() async {
     if (!_k.currentState!.validate()) return;
 
+    final planText = _plan.text.trim().isEmpty ? 'pro' : _plan.text.trim();
     final days = int.tryParse(_days.text.trim()) ?? 30;
     final maxD = int.tryParse(_maxDevices.text.trim()) ?? 3;
     final grace = int.tryParse(_grace.text.trim()) ?? 7;
+
+    if (days < 0) {
+      _msg('المدة غير صالحة.');
+      return;
+    }
+
+    if (maxD < 0) {
+      _msg('حد الأجهزة غير صالح.');
+      return;
+    }
+
+    if (grace < 0) {
+      _msg('فترة السماح غير صالحة.');
+      return;
+    }
 
     final payload = LicenseSigner.buildPayload(
       shopId: widget.shop.id,
       shopName: widget.shop.name,
       ownerName: widget.shop.ownerName,
-      plan: _plan.text.trim().isEmpty ? 'pro' : _plan.text.trim(),
+      plan: planText,
       features: List<String>.from(_features),
       maxDevices: maxD,
       days: days,
@@ -90,6 +117,7 @@ class _LicenseIssueScreenState extends State<LicenseIssueScreen> {
 
     final rec = LicenseRecord(
       shopId: widget.shop.id,
+      plan: planText,
       features: List<String>.from(_features),
       maxDevices: maxD,
       issuedAt: payload['issuedAt'] as String,
@@ -106,16 +134,19 @@ class _LicenseIssueScreenState extends State<LicenseIssueScreen> {
     );
 
     await AdminDB.addLicense(rec);
-    await AdminDB.saveShop(Shop(
-      id: widget.shop.id,
-      name: widget.shop.name,
-      ownerName: widget.shop.ownerName,
-      phone: widget.shop.phone,
-      plan: rec.features.isEmpty ? widget.shop.plan : _plan.text.trim(),
-      status: widget.shop.status,
-      createdAt: widget.shop.createdAt,
-      updatedAt: widget.shop.updatedAt,
-    ));
+
+    await AdminDB.saveShop(
+      Shop(
+        id: widget.shop.id,
+        name: widget.shop.name,
+        ownerName: widget.shop.ownerName,
+        phone: widget.shop.phone,
+        plan: planText,
+        status: widget.shop.status,
+        createdAt: widget.shop.createdAt,
+        updatedAt: widget.shop.updatedAt,
+      ),
+    );
 
     _showCode(code);
     _load();
@@ -131,10 +162,14 @@ class _LicenseIssueScreenState extends State<LicenseIssueScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const Text('أرسل هذا الرمز لصاحب المحل، وليَلصقه في: '
-                  'الإعدادات ← ترخيص الناشر ← استيراد.'),
+              const Text(
+                'أرسل هذا الرمز لصاحب المحل، وليَلصقه في: الإعدادات ← ترخيص الناشر ← استيراد.',
+              ),
               const SizedBox(height: 12),
-              SelectableText(code, style: const TextStyle(fontSize: 12)),
+              SelectableText(
+                code,
+                style: const TextStyle(fontSize: 12),
+              ),
               const SizedBox(height: 12),
               Row(
                 children: <Widget>[
@@ -151,8 +186,10 @@ class _LicenseIssueScreenState extends State<LicenseIssueScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: () => Share.share(code,
-                          subject: 'ترخيص سوقنا - ${widget.shop.name}'),
+                      onPressed: () => Share.share(
+                        code,
+                        subject: 'ترخيص سوقنا - ${widget.shop.name}',
+                      ),
                       icon: const Icon(Icons.share),
                       label: const Text('مشاركة'),
                     ),
@@ -164,8 +201,9 @@ class _LicenseIssueScreenState extends State<LicenseIssueScreen> {
         ),
         actions: <Widget>[
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('إغلاق')),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إغلاق'),
+          ),
         ],
       ),
     );
@@ -209,13 +247,20 @@ class _LicenseIssueScreenState extends State<LicenseIssueScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Text('معرّف المحل: ${widget.shop.id}',
-                            style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text(
+                          'معرّف المحل: ${widget.shop.id}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 4),
                         Text('المالك: ${widget.shop.ownerName}'),
                         const SizedBox(height: 12),
-                        const Text('إصدار ترخيص جديد',
-                            style: TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.bold)),
+                        const Text(
+                          'إصدار ترخيص جديد',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         const SizedBox(height: 12),
                         Form(
                           key: _k,
@@ -224,19 +269,26 @@ class _LicenseIssueScreenState extends State<LicenseIssueScreen> {
                               TextFormField(
                                 controller: _plan,
                                 decoration: const InputDecoration(
-                                    labelText: 'الخطة',
-                                    border: OutlineInputBorder()),
+                                  labelText: 'الخطة',
+                                  helperText: 'trial / basic / pro / enterprise',
+                                  border: OutlineInputBorder(),
+                                ),
+                                validator: (v) =>
+                                    (v == null || v.trim().isEmpty)
+                                        ? 'مطلوب'
+                                        : null,
                               ),
                               const SizedBox(height: 12),
                               TextFormField(
                                 controller: _days,
                                 keyboardType: TextInputType.number,
                                 decoration: const InputDecoration(
-                                    labelText: 'المدة بالأيام',
-                                    border: OutlineInputBorder()),
+                                  labelText: 'المدة بالأيام',
+                                  border: OutlineInputBorder(),
+                                ),
                                 validator: (v) {
                                   final n = int.tryParse(v?.trim() ?? '');
-                                  if (n == null) return 'رقم غير صالح';
+                                  if (n == null || n < 0) return 'رقم غير صالح';
                                   return null;
                                 },
                               ),
@@ -245,8 +297,9 @@ class _LicenseIssueScreenState extends State<LicenseIssueScreen> {
                                 controller: _maxDevices,
                                 keyboardType: TextInputType.number,
                                 decoration: const InputDecoration(
-                                    labelText: 'حد الأجهزة',
-                                    border: OutlineInputBorder()),
+                                  labelText: 'حد الأجهزة',
+                                  border: OutlineInputBorder(),
+                                ),
                                 validator: (v) {
                                   final n = int.tryParse(v?.trim() ?? '');
                                   if (n == null || n < 0) return 'رقم غير صالح';
@@ -258,8 +311,9 @@ class _LicenseIssueScreenState extends State<LicenseIssueScreen> {
                                 controller: _grace,
                                 keyboardType: TextInputType.number,
                                 decoration: const InputDecoration(
-                                    labelText: 'فترة السماح (أيام)',
-                                    border: OutlineInputBorder()),
+                                  labelText: 'فترة السماح بالأيام',
+                                  border: OutlineInputBorder(),
+                                ),
                                 validator: (v) {
                                   final n = int.tryParse(v?.trim() ?? '');
                                   if (n == null || n < 0) return 'رقم غير صالح';
@@ -291,14 +345,18 @@ class _LicenseIssueScreenState extends State<LicenseIssueScreen> {
                               DropdownButtonFormField<String>(
                                 value: _status,
                                 decoration: const InputDecoration(
-                                    labelText: 'حالة الترخيص',
-                                    border: OutlineInputBorder()),
-                                items: const <DropdownMenuItem<String>>[
-                                  DropdownMenuItem<String>(
-                                      value: 'active', child: Text('سارٍ')),
-                                  DropdownMenuItem<String>(
-                                      value: 'revoked',
-                                      child: Text('معطّل')),
+                                  labelText: 'حالة الترخيص',
+                                  border: OutlineInputBorder(),
+                                ),
+                                items: <DropdownMenuItem<String>>[
+                                  const DropdownMenuItem<String>(
+                                    value: 'active',
+                                    child: Text('سارٍ'),
+                                  ),
+                                  const DropdownMenuItem<String>(
+                                    value: 'revoked',
+                                    child: Text('معطّل'),
+                                  ),
                                 ],
                                 onChanged: (v) =>
                                     setState(() => _status = v ?? 'active'),
@@ -306,9 +364,10 @@ class _LicenseIssueScreenState extends State<LicenseIssueScreen> {
                               const SizedBox(height: 12),
                               const Align(
                                 alignment: AlignmentDirectional.centerStart,
-                                child: Text('الميزات المفعّلة',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.bold)),
+                                child: Text(
+                                  'الميزات المفعّلة',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
                               _featureTiles(),
                               const SizedBox(height: 16),
@@ -328,26 +387,30 @@ class _LicenseIssueScreenState extends State<LicenseIssueScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text('سجل التراخيص',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const Text(
+                  'سجل التراخيص',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 8),
                 if (_licenses.isEmpty)
                   const Text('لا توجد تراخيص صادرة بعد.')
                 else
                   ..._licenses.map((r) {
-                    final expired = DateTime.tryParse(r.expiresAt) != null &&
-                        DateTime.now().isAfter(DateTime.parse(r.expiresAt));
+                    final expired = _isExpired(r.expiresAt);
                     final color = r.status == 'revoked'
                         ? Colors.red
                         : (expired ? Colors.orange : Colors.green);
+
                     return Card(
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
                         leading: Icon(Icons.verified, color: color),
                         title: Text(
-                            '${r.plan.toUpperCase()} • ${r.maxDevices} أجهزة'),
+                          '${r.plan.isEmpty ? 'TRIAL' : r.plan.toUpperCase()} • ${r.maxDevices} أجهزة',
+                        ),
                         subtitle: Text(
-                            'صادر: ${r.issuedAt}\nينتهي: ${r.expiresAt}\nالحالة: ${r.status}'),
+                          'صادر: ${r.issuedAt}\nينتهي: ${r.expiresAt}\nالحالة: ${r.status}',
+                        ),
                         isThreeLine: true,
                         trailing: IconButton(
                           icon: const Icon(Icons.visibility),
