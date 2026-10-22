@@ -3,9 +3,6 @@ name: Build Admin APK
 on:
   push:
     branches: [master]
-    paths:
-      - 'admin/**'
-      - '.github/workflows/build-admin.yml'
   workflow_dispatch:
 
 jobs:
@@ -14,21 +11,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
 
-      - name: Generate native scaffolding
-        working-directory: admin
+      - name: Generate Android scaffolding in temp dir (never touches admin/lib)
         run: |
-          flutter create . --org com.abdo15542 --project-name souqna_admin || true
-          git checkout -- pubspec.yaml lib/ 2>/dev/null || true
+          rm -rf /tmp/admin_scaffold
+          mkdir -p /tmp/admin_scaffold
+          cd /tmp/admin_scaffold
+          flutter create . --org com.abdo15542 --project-name souqna_admin --platforms=android
+
+      - name: Copy only android/ into admin/
+        run: |
+          rm -rf admin/android
+          cp -r /tmp/admin_scaffold/android admin/android
 
       - name: Pub get
         working-directory: admin
         run: flutter pub get
 
-      - name: Build APK
+      - name: Build Admin APK
         working-directory: admin
         run: flutter build apk --release --no-tree-shake-icons
 
