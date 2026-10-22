@@ -5,6 +5,7 @@ import '../db.dart';
 import '../device_permissions.dart';
 import '../models.dart';
 import '../services/device_service.dart';
+import '../services/vendor_license_service.dart';
 import 'alerts.dart';
 import 'audit_log.dart';
 import 'batches.dart';
@@ -25,6 +26,7 @@ import 'shifts.dart';
 import 'smart_insights.dart';
 import 'stock_take.dart';
 import 'suppliers.dart';
+import 'vendor_license.dart';
 import '../utils.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -63,6 +65,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
+
+    try {
+      await VendorLicenseService.reload();
+    } catch (_) {}
 
     final now = DateTime.now();
     final sod = DateTime(now.year, now.month, now.day);
@@ -130,6 +136,60 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Widget? _licenseBanner() {
+    final days = VendorLicenseService.daysRemaining();
+
+    if (VendorLicenseService.isBlocked()) {
+      return Card(
+        color: Colors.red.shade50,
+        child: ListTile(
+          leading: const Icon(Icons.lock_outline, color: Colors.red),
+          title: const Text('اشتراك المحل غير فعّال'),
+          subtitle: const Text('تم إيقاف أو انتهاء ترخيص الناشر. العمليات مقفلة.'),
+          trailing: const Icon(Icons.chevron_left),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const VendorLicenseScreen()),
+          ),
+        ),
+      );
+    }
+
+    if (days != null && days <= 7) {
+      return Card(
+        color: Colors.orange.shade50,
+        child: ListTile(
+          leading: const Icon(Icons.warning_amber, color: Colors.orange),
+          title: Text('ينتهي اشتراك المحل خلال $days يوم'),
+          subtitle: const Text('راجع المالك/الناشر للتمديد.'),
+          trailing: const Icon(Icons.chevron_left),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const VendorLicenseScreen()),
+          ),
+        ),
+      );
+    }
+
+    if (!VendorLicenseService.hasLicense()) {
+      return Card(
+        color: Colors.blue.shade50,
+        child: ListTile(
+          leading: const Icon(Icons.info_outline, color: Colors.blue),
+          title: const Text('لم يُستورد ترخيص ناشر بعد'),
+          subtitle: const Text('التطبيق يعمل حاليًا في وضع تجريبي مفتوح.'),
+          trailing: const Icon(Icons.chevron_left),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const VendorLicenseScreen()),
+          ),
+        ),
+      );
+    }
+
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final dev = DeviceService.current;
@@ -140,15 +200,20 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    final expired = DeviceService.isExpired(dev);
     final owner = dev.isOwner;
+    final deviceExpired = DeviceService.isExpired(dev);
+    final licenseBlocked = VendorLicenseService.isBlocked();
+    final blocked = deviceExpired || licenseBlocked;
 
-    bool can(String p) => DeviceService.hasPermission(p);
-    bool canDo(String p) => !expired && DeviceService.hasPermission(p);
+    bool licensed(String feature) => VendorLicenseService.canUse(feature);
+    bool can(String permission) =>
+        licensed(permission) && DeviceService.hasPermission(permission);
+    bool canDo(String permission) => !blocked && can(permission);
 
     final showFinance = owner || can(Perm.reports);
     final cur = _settings.currency;
     final alertTotal = _lowStockCount + _staleCount + _overdueCount;
+    final banner = _licenseBanner();
 
     final stats = <Widget>[];
 
@@ -217,22 +282,22 @@ class _HomeScreenState extends State<HomeScreen> {
         _act('الديون', Icons.book, const DebtsScreen()),
       if (can(Perm.expenses))
         _act('المصروفات', Icons.money_off, const ExpensesScreen()),
-      if (can(Perm.shifts))
+      if (canDo(Perm.shifts))
         _act('النوبات والصندوق', Icons.account_balance_wallet, const ShiftsScreen()),
     ];
 
     final adminActions = <Widget>[
       if (showFinance)
         _act('التقارير', Icons.bar_chart, const ReportsScreen()),
-      if (owner || can(Perm.payroll))
+      if (can(Perm.payroll))
         _act('الموظفون والرواتب', Icons.badge, const EmployeesScreen()),
-      if (owner || can(Perm.cashiers))
+      if (can(Perm.cashiers))
         _act('الكاشيرين', Icons.people, const CashiersScreen()),
-      if (owner || can(Perm.audit))
+      if (can(Perm.audit))
         _act('سجل التدقيق', Icons.history, const AuditLogScreen()),
-      if (owner)
+      if (owner && licensed(Perm.devices))
         _act('إدارة الهواتف', Icons.phone_android, const ManageDevicesScreen()),
-      if (owner || can(Perm.settings))
+      if (owner || DeviceService.hasPermission(Perm.settings))
         _act('الإعدادات', Icons.settings, const SettingsScreen()),
     ];
 
@@ -243,6 +308,17 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text('${_settings.shopName} • ${dev.deviceName}'),
         actions: [
+          IconButton(
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const VendorLicenseScreen()),
+              );
+              _load();
+            },
+            icon: const Icon(Icons.verified_user_outlined),
+            tooltip: 'ترخيص الناشر',
+          ),
           if (can(Perm.alerts))
             IconButton(
               onPressed: () async {
@@ -259,7 +335,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               tooltip: 'التنبيهات',
             ),
-          if (owner)
+          if (owner && licensed(Perm.devices))
             IconButton(
               onPressed: () async {
                 await Navigator.push(
@@ -292,7 +368,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-          if (owner || can(Perm.settings))
+          if (owner || DeviceService.hasPermission(Perm.settings))
             IconButton(
               onPressed: () async {
                 await Navigator.push(
@@ -312,7 +388,11 @@ class _HomeScreenState extends State<HomeScreen> {
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  if (expired)
+                  if (banner != null) ...[
+                    banner,
+                    const SizedBox(height: 12),
+                  ],
+                  if (blocked)
                     Card(
                       color: Colors.red.shade50,
                       child: Padding(
@@ -322,11 +402,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             const Row(
                               children: [
-                                Icon(Icons.lock_outline, color: Colors.red),
+                                Icon(Icons.block, color: Colors.red),
                                 SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    'انتهت صلاحية هذا الجهاز',
+                                    'العمليات موقوفة',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       color: Colors.red,
@@ -336,11 +416,23 @@ class _HomeScreenState extends State<HomeScreen> {
                               ],
                             ),
                             const SizedBox(height: 8),
-                            const Text('لا يمكن تنفيذ عمليات بيع أو تعديل. تواصل مع المالك لتمديد الترخيص.'),
+                            const Text('لا يمكن تنفيذ بيع أو تعديل أو فتح وردية. راجع ترخيص الناشر أو ترخيص هذا الجهاز.'),
                             const SizedBox(height: 12),
                             Wrap(
                               spacing: 8,
                               children: [
+                                OutlinedButton.icon(
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const VendorLicenseScreen(),
+                                      ),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.verified_user),
+                                  label: const Text('ترخيص الناشر'),
+                                ),
                                 if (!owner)
                                   OutlinedButton.icon(
                                     onPressed: () {
@@ -353,19 +445,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                     },
                                     icon: const Icon(Icons.info_outline),
                                     label: const Text('حالة جهازي'),
-                                  ),
-                                if (owner || can(Perm.settings))
-                                  OutlinedButton.icon(
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => const SettingsScreen(),
-                                        ),
-                                      );
-                                    },
-                                    icon: const Icon(Icons.settings),
-                                    label: const Text('الإعدادات'),
                                   ),
                               ],
                             ),
@@ -435,7 +514,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: adminActions,
                     ),
                   ],
-                  if (!hasAnyAction && !expired)
+                  if (!hasAnyAction && !blocked)
                     const Padding(
                       padding: EdgeInsets.all(24),
                       child: Center(child: Text('لا توجد شاشات مسموحة لهذا الجهاز.')),

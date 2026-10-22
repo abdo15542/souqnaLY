@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'db.dart';
 import 'screens/onboarding.dart';
 import 'services/device_service.dart';
+import 'services/vendor_license_service.dart';
 import 'theme_state.dart';
 
 void main() async {
@@ -12,6 +13,10 @@ void main() async {
   appTheme.value = _toMode(mode);
 
   await DeviceService.bootstrap();
+
+  try {
+    await VendorLicenseService.bootstrap();
+  } catch (_) {}
 
   runApp(const SouqnaApp());
 }

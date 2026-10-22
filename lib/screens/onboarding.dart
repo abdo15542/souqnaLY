@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../db.dart';
 import '../models.dart';
 import '../services/device_service.dart';
+import '../services/vendor_license_service.dart';
 import 'app_lock.dart';
 import 'home.dart';
 
@@ -25,6 +26,9 @@ class _RootScreenState extends State<RootScreen> {
 
   Future<void> _init() async {
     await DeviceService.bootstrap();
+    try {
+      await VendorLicenseService.bootstrap();
+    } catch (_) {}
     if (!mounted) return;
     setState(() => _loading = false);
   }

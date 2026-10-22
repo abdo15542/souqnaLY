@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../device_models.dart';
 import '../device_permissions.dart';
 import '../services/device_service.dart';
+import '../services/vendor_license_service.dart';
 import '../utils.dart';
 
 class ManageDevicesScreen extends StatefulWidget {
@@ -31,6 +32,10 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
 
+    try {
+      await VendorLicenseService.reload();
+    } catch (_) {}
+
     final dev = DeviceService.current;
     if (dev == null || !dev.isOwner) {
       if (!mounted) return;
@@ -55,6 +60,21 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
   }
 
   Future<void> _add() async {
+    if (VendorLicenseService.isBlocked()) {
+      _msg('اشتراك المحل غير فعّال. لا يمكن إضافة أجهزة.');
+      return;
+    }
+
+    if (!VendorLicenseService.canManageDevices()) {
+      _msg('إدارة الهواتف غير مفعّلة في اشتراك هذا المحل.');
+      return;
+    }
+
+    if (!await VendorLicenseService.canAddDevice()) {
+      _msg('وصلت إلى الحد الأقصى للأجهزة المسموح بها في اشتراكك.');
+      return;
+    }
+
     final rd = await showModalBottomSheet<RegisteredDevice>(
       context: context,
       isScrollControlled: true,
@@ -68,6 +88,11 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
   }
 
   void _showActivation(RegisteredDevice rd) {
+    if (VendorLicenseService.isBlocked()) {
+      _msg('اشتراك المحل غير فعّال. لا يمكن إصدار رمز تفعيل.');
+      return;
+    }
+
     if (rd.status != 'active') {
       _msg('هذا الجهاز معطّل. فعّله أولًا لإصدار رمز تفعيل.');
       return;
@@ -119,6 +144,11 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
   }
 
   Future<void> _extend(RegisteredDevice rd) async {
+    if (VendorLicenseService.isBlocked()) {
+      _msg('اشتراك المحل غير فعّال. لا يمكن التمديد.');
+      return;
+    }
+
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
@@ -130,7 +160,16 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
     if (picked == null) return;
 
     final endOfDay = DateTime(picked.year, picked.month, picked.day, 23, 59, 59);
-    await DeviceService.extendDevice(rd.deviceId, endOfDay.toIso8601String());
+    final requested = endOfDay.toIso8601String();
+    final exp = VendorLicenseService.clampExpiry(requested);
+
+    final expDate = DateTime.tryParse(exp);
+    if (expDate == null || expDate.isBefore(now)) {
+      _msg('لا يمكن التمديد بعد انتهاء اشتراك المحل.');
+      return;
+    }
+
+    await DeviceService.extendDevice(rd.deviceId, exp);
 
     _msg('تم التمديد. أصدر رمز تفعيل جديدًا من زر الرمز.');
     _load();
@@ -138,6 +177,32 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
 
   Future<void> _toggleStatus(RegisteredDevice rd) async {
     final newStatus = rd.isActive ? 'revoked' : 'active';
+
+    if (newStatus == 'active') {
+      if (VendorLicenseService.isBlocked()) {
+        _msg('اشتراك المحل غير فعّال. لا يمكن تفعيل أجهزة.');
+        return;
+      }
+
+      if (!VendorLicenseService.canManageDevices()) {
+        _msg('إدارة الهواتف غير مفعّلة في اشتراك هذا المحل.');
+        return;
+      }
+
+      if (rd.expiresAt.isNotEmpty) {
+        final e = DateTime.tryParse(rd.expiresAt);
+        if (e != null && e.isBefore(DateTime.now())) {
+          _msg('انتهت صلاحية هذا الجهاز. مدده أولًا.');
+          return;
+        }
+      }
+
+      if (!await VendorLicenseService.canAddDevice()) {
+        _msg('وصلت إلى الحد الأقصى للأجهزة المسموح بها في اشتراكك.');
+        return;
+      }
+    }
+
     await DeviceService.setDeviceStatus(rd.deviceId, newStatus);
     _msg(newStatus == 'active' ? 'تم تفعيل الجهاز' : 'تم تعطيل الجهاز');
     _load();
@@ -201,118 +266,182 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
       );
     }
 
+    final blocked = VendorLicenseService.isBlocked();
+    final canManage = VendorLicenseService.canManageDevices();
+    final max = VendorLicenseService.maxDevices();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('إدارة الهواتف'),
         actions: [
           IconButton(
-            onPressed: _add,
+            onPressed: (!blocked && canManage) ? _add : null,
             icon: const Icon(Icons.add),
             tooltip: 'إضافة هاتف',
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _devices.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.phone_android, size: 64, color: Colors.grey),
-                        const SizedBox(height: 12),
-                        const Text('لا توجد أجهزة فرعية مسجلة'),
-                        const SizedBox(height: 16),
-                        FilledButton.icon(
-                          onPressed: _add,
-                          icon: const Icon(Icons.add),
-                          label: const Text('إضافة هاتف فرعي'),
-                        ),
-                      ],
+      body: Column(
+        children: [
+          if (blocked)
+            Card(
+              color: Colors.red.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: const [
+                    Icon(Icons.lock_outline, color: Colors.red),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'اشتراك المحل غير فعّال. لا يمكن إضافة أو تفعيل أجهزة.',
+                      ),
                     ),
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: _devices.length,
-                    itemBuilder: (ctx, i) {
-                      final rd = _devices[i];
-                      final expired = _isExpired(rd.expiresAt);
-                      final color = rd.isRevoked
-                          ? Colors.red
-                          : (expired ? Colors.orange : Colors.green);
-
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: color.withValues(alpha: 0.15),
-                            child: Icon(Icons.phone_android, color: color),
-                          ),
-                          title: Text(rd.deviceName),
-                          subtitle: Text(
-                            '${rd.employeeName.isEmpty ? 'بدون موظف' : rd.employeeName}\n'
-                            '${Perm.roleLabel(rd.role)} • ${rd.status}\n'
-                            'الانتهاء: ${rd.expiresAt.isEmpty ? 'بدون' : formatDateTime(rd.expiresAt)}',
-                          ),
-                          isThreeLine: true,
-                          trailing: PopupMenuButton<String>(
-                            onSelected: (v) => _menu(v, rd),
-                            itemBuilder: (_) => [
-                              const PopupMenuItem<String>(
-                                value: 'code',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.qr_code, size: 18),
-                                    SizedBox(width: 8),
-                                    Text('رمز التفعيل'),
-                                  ],
-                                ),
-                              ),
-                              const PopupMenuItem<String>(
-                                value: 'extend',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.update, size: 18),
-                                    SizedBox(width: 8),
-                                    Text('تمديد'),
-                                  ],
-                                ),
-                              ),
-                              PopupMenuItem<String>(
-                                value: 'toggle',
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      rd.isActive ? Icons.block : Icons.check_circle,
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(rd.isActive ? 'تعطيل' : 'تفعيل'),
-                                  ],
-                                ),
-                              ),
-                              const PopupMenuItem<String>(
-                                value: 'delete',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.delete, size: 18, color: Colors.red),
-                                    SizedBox(width: 8),
-                                    Text('حذف'),
-                                  ],
-                                ),
+                  ],
+                ),
+              ),
+            ),
+          if (!canManage && !blocked)
+            Card(
+              color: Colors.orange.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: const [
+                    Icon(Icons.warning_amber, color: Colors.orange),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text('إدارة الهواتف غير مفعّلة في اشتراك هذا المحل.'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _mini('الأجهزة', '${_devices.length}'),
+                _mini('الحد المسموح', '$max'),
+                _mini('الحالة', blocked ? 'موقوف' : 'سارٍ'),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _devices.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.phone_android, size: 64, color: Colors.grey),
+                              const SizedBox(height: 12),
+                              const Text('لا توجد أجهزة فرعية مسجلة'),
+                              const SizedBox(height: 16),
+                              FilledButton.icon(
+                                onPressed: (!blocked && canManage) ? _add : null,
+                                icon: const Icon(Icons.add),
+                                label: const Text('إضافة هاتف فرعي'),
                               ),
                             ],
                           ),
                         ),
-                      );
-                    },
-                  ),
-                ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _load,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: _devices.length,
+                          itemBuilder: (ctx, i) {
+                            final rd = _devices[i];
+                            final expired = _isExpired(rd.expiresAt);
+                            final color = rd.isRevoked
+                                ? Colors.red
+                                : (expired ? Colors.orange : Colors.green);
+
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: color.withValues(alpha: 0.15),
+                                  child: Icon(Icons.phone_android, color: color),
+                                ),
+                                title: Text(rd.deviceName),
+                                subtitle: Text(
+                                  '${rd.employeeName.isEmpty ? 'بدون موظف' : rd.employeeName}\n'
+                                  '${Perm.roleLabel(rd.role)} • ${rd.status}\n'
+                                  'الانتهاء: ${rd.expiresAt.isEmpty ? 'بدون' : formatDateTime(rd.expiresAt)}',
+                                ),
+                                isThreeLine: true,
+                                trailing: PopupMenuButton<String>(
+                                  onSelected: (v) => _menu(v, rd),
+                                  itemBuilder: (_) => [
+                                    const PopupMenuItem<String>(
+                                      value: 'code',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.qr_code, size: 18),
+                                          SizedBox(width: 8),
+                                          Text('رمز التفعيل'),
+                                        ],
+                                      ),
+                                    ),
+                                    const PopupMenuItem<String>(
+                                      value: 'extend',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.update, size: 18),
+                                          SizedBox(width: 8),
+                                          Text('تمديد'),
+                                        ],
+                                      ),
+                                    ),
+                                    PopupMenuItem<String>(
+                                      value: 'toggle',
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            rd.isActive ? Icons.block : Icons.check_circle,
+                                            size: 18,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(rd.isActive ? 'تعطيل' : 'تفعيل'),
+                                        ],
+                                      ),
+                                    ),
+                                    const PopupMenuItem<String>(
+                                      value: 'delete',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.delete, size: 18, color: Colors.red),
+                                          SizedBox(width: 8),
+                                          Text('حذف'),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+        ],
+      ),
+    );
+  }
+
+  Widget _mini(String t, String v) {
+    return Column(
+      children: [
+        Text(t, style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 4),
+        Text(v, style: const TextStyle(fontWeight: FontWeight.bold)),
+      ],
     );
   }
 }
@@ -333,7 +462,13 @@ class _AddDeviceSheetState extends State<_AddDeviceSheet> {
   final _days = TextEditingController(text: '30');
 
   String _role = 'cashier';
-  late List<String> _perms = List<String>.from(Perm.presets['cashier']!);
+  late List<String> _perms;
+
+  @override
+  void initState() {
+    super.initState();
+    _perms = _filteredPreset('cashier');
+  }
 
   @override
   void dispose() {
@@ -344,27 +479,61 @@ class _AddDeviceSheetState extends State<_AddDeviceSheet> {
     super.dispose();
   }
 
+  List<String> _filteredPreset(String role) {
+    final base = Perm.presets[role] ?? <String>[];
+    return base.where((p) => VendorLicenseService.canUse(p)).toList();
+  }
+
   void _setRole(String r) {
     setState(() {
       _role = r;
-      _perms = List<String>.from(Perm.presets[r] ?? <String>[]);
+      _perms = _filteredPreset(r);
     });
   }
 
   Future<void> _save() async {
     if (!_k.currentState!.validate()) return;
 
+    if (VendorLicenseService.isBlocked()) {
+      _snack('اشتراك المحل غير فعّال.');
+      return;
+    }
+
+    if (!VendorLicenseService.canManageDevices()) {
+      _snack('إدارة الهواتف غير مفعّلة في اشتراك هذا المحل.');
+      return;
+    }
+
+    if (!await VendorLicenseService.canAddDevice()) {
+      _snack('وصلت إلى الحد الأقصى للأجهزة المسموح بها في اشتراكك.');
+      return;
+    }
+
+    for (final p in _perms) {
+      if (!VendorLicenseService.canUse(p)) {
+        _snack('صلاحية ${Perm.label(p)} غير مسموحة في اشتراك المحل.');
+        return;
+      }
+    }
+
     final days = int.tryParse(_days.text.trim()) ?? 30;
     if (days < 0) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('المدة غير صالحة')));
+      _snack('المدة غير صالحة.');
       return;
     }
 
     final now = DateTime.now();
-    final exp = days == 0
+    final requested = days == 0
         ? now.toIso8601String()
         : now.add(Duration(days: days)).toIso8601String();
+
+    final exp = VendorLicenseService.clampExpiry(requested);
+    final expDate = DateTime.tryParse(exp);
+
+    if (expDate == null || expDate.isBefore(now)) {
+      _snack('لا يمكن إنشاء جهاز ينتهي قبل الوقت الحالي أو بعد انتهاء اشتراك المحل.');
+      return;
+    }
 
     final rd = RegisteredDevice(
       deviceId: _request.text.trim().toUpperCase(),
@@ -383,6 +552,11 @@ class _AddDeviceSheetState extends State<_AddDeviceSheet> {
     Navigator.pop(context, rd);
   }
 
+  void _snack(String t) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -398,6 +572,11 @@ class _AddDeviceSheetState extends State<_AddDeviceSheet> {
               const Text(
                 'إضافة هاتف فرعي',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'حد الأجهزة في الاشتراك: ${VendorLicenseService.maxDevices()}',
+                style: const TextStyle(color: Colors.grey),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -454,7 +633,7 @@ class _AddDeviceSheetState extends State<_AddDeviceSheet> {
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'المدة بالأيام',
-                  helperText: '0 = ينتهي فورًا للاختبار',
+                  helperText: 'سيُقلَّم تلقائيًا إذا تجاوز انتهاء اشتراك المحل',
                   border: OutlineInputBorder(),
                 ),
                 validator: (v) {
@@ -467,20 +646,26 @@ class _AddDeviceSheetState extends State<_AddDeviceSheet> {
               const Text('الصلاحيات', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               ...Perm.allSub.map(
-                (p) => CheckboxListTile(
-                  dense: true,
-                  value: _perms.contains(p),
-                  title: Text(Perm.label(p)),
-                  onChanged: (v) {
-                    setState(() {
-                      if (v == true) {
-                        if (!_perms.contains(p)) _perms.add(p);
-                      } else {
-                        _perms.remove(p);
-                      }
-                    });
-                  },
-                ),
+                (p) {
+                  final allowed = VendorLicenseService.canUse(p);
+                  return CheckboxListTile(
+                    dense: true,
+                    value: allowed && _perms.contains(p),
+                    title: Text(Perm.label(p)),
+                    subtitle: allowed ? null : const Text('غير مسموحة في اشتراك المحل'),
+                    onChanged: allowed
+                        ? (v) {
+                            setState(() {
+                              if (v == true) {
+                                if (!_perms.contains(p)) _perms.add(p);
+                              } else {
+                                _perms.remove(p);
+                              }
+                            });
+                          }
+                        : null,
+                  );
+                },
               ),
               const SizedBox(height: 16),
               FilledButton(
