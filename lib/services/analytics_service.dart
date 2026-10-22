@@ -65,7 +65,7 @@ class AnalyticsService {
     final cutoff = _dayString(DateTime.now().add(Duration(days: days)));
 
     return d.rawQuery(
-      "SELECT product_name, qty, expires_at, note FROM batches WHERE expires_at != '' AND expires_at <= ? ORDER BY expires_at ASC LIMIT 20",
+      "SELECT product_name, qty, expiry_date, note FROM batches WHERE expiry_date != '' AND expiry_date <= ? ORDER BY expiry_date ASC LIMIT 20",
       [cutoff],
     );
   }

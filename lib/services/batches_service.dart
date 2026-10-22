@@ -9,11 +9,11 @@ class BatchesService {
     if (_ready) return;
     final d = await LocalDB.db;
     await d.execute(
-        'CREATE TABLE IF NOT EXISTS batches(id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER,product_name TEXT NOT NULL DEFAULT \'\',qty REAL NOT NULL DEFAULT 0,cost_price REAL NOT NULL DEFAULT 0,produced_at TEXT NOT NULL DEFAULT \'\',expires_at TEXT NOT NULL,note TEXT NOT NULL DEFAULT \'\',created_at TEXT NOT NULL)');
+        'CREATE TABLE IF NOT EXISTS batches(id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER,product_name TEXT NOT NULL DEFAULT \'\',qty REAL NOT NULL DEFAULT 0,cost_price REAL NOT NULL DEFAULT 0,produced_at TEXT NOT NULL DEFAULT \'\',expiry_date TEXT NOT NULL,note TEXT NOT NULL DEFAULT \'\',created_at TEXT NOT NULL)');
     await d.execute(
         'CREATE INDEX IF NOT EXISTS idx_batches_product ON batches(product_id)');
     await d.execute(
-        'CREATE INDEX IF NOT EXISTS idx_batches_expiry ON batches(expires_at)');
+        'CREATE INDEX IF NOT EXISTS idx_batches_expiry ON batches(expiry_date)');
     _ready = true;
   }
 
@@ -39,7 +39,7 @@ class BatchesService {
     }
     final w = cl.isEmpty ? null : cl.join(' AND ');
     final rows = await d.query('batches',
-        where: w, whereArgs: ar, orderBy: 'expires_at ASC, id ASC');
+        where: w, whereArgs: ar, orderBy: 'expiry_date ASC, id ASC');
     return rows.map(Batch.fromMap).toList();
   }
 
@@ -53,7 +53,7 @@ class BatchesService {
       'qty': b.qty,
       'cost_price': b.costPrice,
       'produced_at': b.producedAt,
-      'expires_at': b.expiresAt,
+      'expiry_date': b.expiresAt,
       'note': b.note,
       'created_at': b.createdAt.isEmpty ? now : b.createdAt,
     };

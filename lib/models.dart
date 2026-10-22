@@ -853,7 +853,7 @@ class Batch {
         qty: (m['qty'] as num?)?.toDouble() ?? 0,
         costPrice: (m['cost_price'] as num?)?.toDouble() ?? 0,
         producedAt: (m['produced_at'] as String?) ?? '',
-        expiresAt: m['expires_at'] as String,
+        expiresAt: m['expiry_date'] as String,
         note: (m['note'] as String?) ?? '',
         createdAt: m['created_at'] as String,
       );

@@ -150,7 +150,7 @@ class DataHealthService {
     // 8) دفعات منتهية/قريبة الانتهاء
     if (await _tableExists('batches')) {
       final expired = await d.rawQuery(
-        "SELECT COUNT(*) c, GROUP_CONCAT(product_name, ' | ') names FROM batches WHERE expires_at != '' AND expires_at < ?",
+        "SELECT COUNT(*) c, GROUP_CONCAT(product_name, ' | ') names FROM batches WHERE expiry_date != '' AND expiry_date < ?",
         [today],
       );
 
@@ -166,7 +166,7 @@ class DataHealthService {
       }
 
       final expiring = await d.rawQuery(
-        "SELECT COUNT(*) c, GROUP_CONCAT(product_name, ' | ') names FROM batches WHERE expires_at != '' AND expires_at >= ? AND expires_at <= ?",
+        "SELECT COUNT(*) c, GROUP_CONCAT(product_name, ' | ') names FROM batches WHERE expiry_date != '' AND expiry_date >= ? AND expiry_date <= ?",
         [today, soon],
       );
 

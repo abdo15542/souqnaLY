@@ -297,7 +297,7 @@ class _AdvancedAnalyticsScreenState extends State<AdvancedAnalyticsScreen> {
                     ..._batches.map((r) {
                       final name = (r['product_name'] as String?) ?? '';
                       final qty = (r['qty'] as num?)?.toDouble() ?? 0;
-                      final exp = (r['expires_at'] as String?) ?? '';
+                      final exp = (r['expiry_date'] as String?) ?? '';
                       final note = (r['note'] as String?) ?? '';
 
                       return Card(
