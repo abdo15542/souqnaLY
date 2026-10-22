@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../cashier_session.dart';
 import '../db.dart';
@@ -38,6 +39,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _loading = true;
+  bool _renewalPrompted = false;
 
   SalesStats _stats = SalesStats.empty();
   RefundsSummary _refunds = RefundsSummary.empty();
@@ -125,6 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _settings = s;
       _loading = false;
     });
+    _maybePromptRenewal();
   }
 
   Future<void> _switch() async {
@@ -521,6 +524,78 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                 ],
               ),
+      ),
+    );
+  }
+
+  void _maybePromptRenewal() {
+    if (_renewalPrompted) return;
+    if (!VendorLicenseService.shouldWarnRenewal()) return;
+    _renewalPrompted = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _showRenewalDialog();
+    });
+  }
+
+  Future<void> _showRenewalDialog() async {
+    final days = VendorLicenseService.daysRemaining();
+    final phone = VendorLicenseService.current?.supportPhone ?? '';
+    if (!mounted) return;
+
+    final msg = (days != null && days < 0)
+        ? 'انتهى اشتراكك منذ ${-days} يوم (داخل فترة السماح). جدّده الآن لتجنّب القفل الكامل.'
+        : 'يتبقى ${days ?? 0} يوم على انتهاء اشتراكك. جدّده الآن لتجنّب انقطاع العمل.';
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: const Text('تنبيه تجديد الاشتراك'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(msg),
+              const SizedBox(height: 12),
+              if (phone.isNotEmpty) ...<Widget>[
+                const Text('للتجديد تواصل مع الدعم عبر واتساب على الرقم:',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                SelectableText(phone,
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: phone));
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text('تم نسخ رقم الدعم')));
+                  },
+                  icon: const Icon(Icons.copy),
+                  label: const Text('نسخ الرقم'),
+                ),
+                const SizedBox(height: 12),
+              ],
+              const Text('أو استورد ترخيصاً مُجدَّداً من شاشة الترخيص.'),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  ctx,
+                  MaterialPageRoute(
+                      builder: (_) => const VendorLicenseScreen()),
+                );
+              },
+              child: const Text('استيراد ترخيص'),
+            ),
+          ],
+        ),
       ),
     );
   }

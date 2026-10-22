@@ -16,6 +16,7 @@ class VendorLicense {
   final String signature;
   final String rawJson;
   final String importedAt;
+  final String supportPhone;
 
   VendorLicense({
     required this.shopId,
@@ -35,6 +36,7 @@ class VendorLicense {
     required this.signature,
     required this.rawJson,
     required this.importedAt,
+    this.supportPhone = '',
   });
 
   bool get isExpired {
@@ -78,6 +80,7 @@ class VendorLicense {
         'signature': signature,
         'raw_json': rawJson,
         'imported_at': importedAt,
+        'support_phone': supportPhone,
       };
 
   factory VendorLicense.fromMap(Map<String, dynamic> m) {
@@ -100,6 +103,7 @@ class VendorLicense {
       signature: (m['signature'] as String?) ?? '',
       rawJson: (m['raw_json'] as String?) ?? '',
       importedAt: (m['imported_at'] as String?) ?? '',
+      supportPhone: (m['support_phone'] as String?) ?? '',
     );
   }
 }

@@ -46,10 +46,19 @@ class VendorLicenseService {
         'imported_at TEXT NOT NULL DEFAULT \'\')',
       );
 
+      await _ensureColumn(d, 'vendor_license', 'support_phone', "TEXT NOT NULL DEFAULT ''");
       _ready = true;
     }
 
     return d;
+  }
+
+  static Future<void> _ensureColumn(
+      Database d, String table, String column, String def) async {
+    final info = await d.rawQuery('PRAGMA table_info($table)');
+    if (!info.any((e) => e['name'] == column)) {
+      await d.execute('ALTER TABLE $table ADD COLUMN $column $def');
+    }
   }
 
   static String _hmac(String key, String msg) {
@@ -209,6 +218,7 @@ class VendorLicenseService {
       signature: sig,
       rawJson: raw,
       importedAt: now,
+      supportPhone: _s(payload['supportPhone']),
     );
 
     await _save(lic);
@@ -230,6 +240,16 @@ class VendorLicenseService {
     if (e == null) return null;
 
     return e.difference(DateTime.now()).inDays;
+  }
+
+  static bool shouldWarnRenewal() {
+    final l = current;
+    if (l == null) return false;
+    if (l.isBlocked && !l.inGrace) return false;
+    final days = daysRemaining();
+    if (days == null) return false;
+    if (l.isExpired && l.inGrace) return true;
+    return days <= 7;
   }
 
   static bool canUse(String feature) {

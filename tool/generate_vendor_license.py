@@ -130,6 +130,7 @@ def parse_args():
     p.add_argument("--no-backup", action="store_true", help="منع النسخ الاحتياطي")
     p.add_argument("--branches", action="store_true", help="السماح بالفروع")
     p.add_argument("--revoke", action="store_true", help="إصدار ترخيص بحالة معطّل")
+    p.add_argument("--support-phone", default="", help="رقم دعم الناشر (يظهر للعميل عند التنبيه)")
 
     p.add_argument("--out", default="", help="ملف لحفظ الرمز")
 
@@ -173,6 +174,7 @@ def main():
         "allowBackup": not args.no_backup,
         "allowBranches": bool(args.branches),
         "status": "revoked" if args.revoke else "active",
+        "supportPhone": args.support_phone,
         "nonce": nonce,
     }
 
