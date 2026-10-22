@@ -122,3 +122,63 @@ class LicenseRecord {
         createdAt: (m['created_at'] as String?) ?? '',
       );
 }
+
+
+class RenewalRequest {
+  final int? id;
+  final String shopId;
+  final String shopName;
+  final String deviceId;
+  final String deviceName;
+  final String ownerName;
+  final String phone;
+  final String requestedAt;
+  final int daysRequested;
+  final String status;
+  final String code;
+  final String receivedAt;
+
+  RenewalRequest({
+    this.id,
+    required this.shopId,
+    required this.shopName,
+    required this.deviceId,
+    required this.deviceName,
+    required this.ownerName,
+    required this.phone,
+    required this.requestedAt,
+    required this.daysRequested,
+    required this.status,
+    required this.code,
+    required this.receivedAt,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'shop_id': shopId,
+        'shop_name': shopName,
+        'device_id': deviceId,
+        'device_name': deviceName,
+        'owner_name': ownerName,
+        'phone': phone,
+        'requested_at': requestedAt,
+        'days_requested': daysRequested,
+        'status': status,
+        'code': code,
+        'received_at': receivedAt,
+      };
+
+  factory RenewalRequest.fromMap(Map<String, dynamic> m) => RenewalRequest(
+        id: m['id'] as int?,
+        shopId: (m['shop_id'] as String?) ?? '',
+        shopName: (m['shop_name'] as String?) ?? '',
+        deviceId: (m['device_id'] as String?) ?? '',
+        deviceName: (m['device_name'] as String?) ?? '',
+        ownerName: (m['owner_name'] as String?) ?? '',
+        phone: (m['phone'] as String?) ?? '',
+        requestedAt: (m['requested_at'] as String?) ?? '',
+        daysRequested: (m['days_requested'] as int?) ?? 30,
+        status: (m['status'] as String?) ?? 'pending',
+        code: (m['code'] as String?) ?? '',
+        receivedAt: (m['received_at'] as String?) ?? '',
+      );
+}

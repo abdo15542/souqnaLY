@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../admin_db.dart';
 import '../admin_models.dart';
 import 'license_issue.dart';
+import 'renewal_requests.dart';
 import 'shop_form.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -90,6 +91,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('سوقنا كونسول — لوحة الناشر'),
+        actions: <Widget>[
+          IconButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const RenewalRequestsScreen()),
+              );
+            },
+            icon: const Icon(Icons.pending_actions),
+            tooltip: 'طلبات التجديد',
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addShop,

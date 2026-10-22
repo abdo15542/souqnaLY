@@ -5,7 +5,7 @@ import 'admin_models.dart';
 
 class AdminDB {
   static Database? _db;
-  static const int _version = 2;
+  static const int _version = 3;
 
   static Future<Database> get db async => _db ??= await _open();
 
@@ -27,12 +27,20 @@ class AdminDB {
         'CREATE TABLE licenses(id INTEGER PRIMARY KEY AUTOINCREMENT,shop_id TEXT NOT NULL,plan TEXT NOT NULL DEFAULT \'\',features TEXT NOT NULL DEFAULT \'\',max_devices INTEGER NOT NULL DEFAULT 0,issued_at TEXT NOT NULL DEFAULT \'\',expires_at TEXT NOT NULL DEFAULT \'\',grace_days INTEGER NOT NULL DEFAULT 0,allow_export INTEGER NOT NULL DEFAULT 1,allow_backup INTEGER NOT NULL DEFAULT 1,allow_branches INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT \'active\',nonce TEXT NOT NULL DEFAULT \'\',signature TEXT NOT NULL DEFAULT \'\',code TEXT NOT NULL DEFAULT \'\',created_at TEXT NOT NULL DEFAULT \'\')');
 
     await d.execute(
-        'CREATE INDEX IF NOT EXISTS idx_licenses_shop ON licenses(shop_id)');
+        'CREATE TABLE IF NOT EXISTS renewal_requests(id INTEGER PRIMARY KEY AUTOINCREMENT,shop_id TEXT NOT NULL DEFAULT \'\',shop_name TEXT NOT NULL DEFAULT \'\',device_id TEXT NOT NULL DEFAULT \'\',device_name TEXT NOT NULL DEFAULT \'\',owner_name TEXT NOT NULL DEFAULT \'\',phone TEXT NOT NULL DEFAULT \'\',requested_at TEXT NOT NULL DEFAULT \'\',days_requested INTEGER NOT NULL DEFAULT 30,status TEXT NOT NULL DEFAULT \'pending\',code TEXT NOT NULL DEFAULT \'\',received_at TEXT NOT NULL DEFAULT \'\')');
+    await d.execute(
+        'CREATE INDEX IF NOT EXISTS idx_renewal_status ON renewal_requests(status)');
   }
 
   static Future<void> _onUpgrade(Database d, int old, int neu) async {
     if (old < 2) {
       await _addColumn(d, 'licenses', 'plan', "TEXT NOT NULL DEFAULT ''");
+    }
+    if (old < 3) {
+      await d.execute(
+          'CREATE TABLE IF NOT EXISTS renewal_requests(id INTEGER PRIMARY KEY AUTOINCREMENT,shop_id TEXT NOT NULL DEFAULT \'\',shop_name TEXT NOT NULL DEFAULT \'\',device_id TEXT NOT NULL DEFAULT \'\',device_name TEXT NOT NULL DEFAULT \'\',owner_name TEXT NOT NULL DEFAULT \'\',phone TEXT NOT NULL DEFAULT \'\',requested_at TEXT NOT NULL DEFAULT \'\',days_requested INTEGER NOT NULL DEFAULT 30,status TEXT NOT NULL DEFAULT \'pending\',code TEXT NOT NULL DEFAULT \'\',received_at TEXT NOT NULL DEFAULT \'\')');
+      await d.execute(
+          'CREATE INDEX IF NOT EXISTS idx_renewal_status ON renewal_requests(status)');
     }
   }
 
@@ -89,5 +97,28 @@ class AdminDB {
   static Future<int> addLicense(LicenseRecord r) async {
     final d = await db;
     return d.insert('licenses', r.toMap());
+  }
+
+  static Future<List<RenewalRequest>> getRenewalRequests({String status = ''}) async {
+    final d = await db;
+    List<Map<String, Object?>> rows;
+    if (status.isEmpty) {
+      rows = await d.query('renewal_requests', orderBy: 'id DESC');
+    } else {
+      rows = await d.query('renewal_requests',
+          where: 'status = ?', whereArgs: [status], orderBy: 'id DESC');
+    }
+    return rows.map(RenewalRequest.fromMap).toList();
+  }
+
+  static Future<int> addRenewalRequest(RenewalRequest r) async {
+    final d = await db;
+    return d.insert('renewal_requests', r.toMap());
+  }
+
+  static Future<void> setRenewalStatus(int id, String status) async {
+    final d = await db;
+    await d.update('renewal_requests', {'status': status},
+        where: 'id = ?', whereArgs: [id]);
   }
 }
